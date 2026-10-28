@@ -148,3 +148,15 @@ def test_lifespan_reaches_the_app() -> None:
 
     with TestClient(LocalOnlyMiddleware(app, ports=lambda: {3000, 8000})):
         assert started
+
+
+def test_the_backend_listens_only_on_this_computer() -> None:
+    from rxconfig import config
+
+    assert config.backend_host == "127.0.0.1"
+
+
+def test_the_whole_backend_goes_through_the_local_only_middleware() -> None:
+    from cv_generator.app.app import app
+
+    assert app.api_transformer is LocalOnlyMiddleware

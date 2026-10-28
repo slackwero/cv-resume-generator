@@ -32,6 +32,10 @@ config = rx.Config(
     # With only the second one, everything without an explicit background was drawn light:
     # the bar and the rows came out black because they have their own background, and the rest white.
     default_color_mode="dark",
+    # Reflex listens on every network interface by default, and this app has no login:
+    # anyone on the same Wi-Fi could read and change the profile. It is a one-person tool,
+    # so the backend answers only this computer.
+    backend_host="127.0.0.1",
     # It is a personal tool, not a Reflex showcase.
     show_built_with_reflex=False,
     plugins=[

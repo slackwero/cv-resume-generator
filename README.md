@@ -59,13 +59,14 @@ Everything stays on your machine: your profile and your CVs are saved in `data/`
 PDFs in `output/`, both excluded from git.
 
 > [!WARNING]
-> This app is meant to run only on your own computer, for one person. It has **no login
-> and no access control**: anyone who can open its address can see and change your
-> profile and your CVs. Do not deploy it to a public server.
+> This app is meant to run only on your own computer, for one person. It has **no login**:
+> whoever can talk to it can see and change your profile and your CVs. Do not deploy it
+> to a public server.
 >
-> Even when you run it locally, Reflex listens on every network interface, so other
-> devices on the same network (an office or café Wi-Fi, for example) can reach it
-> through your computer's IP address. Run it on a network you trust.
+> On your computer it protects itself: it only answers this computer (`localhost`), and it
+> refuses requests from other websites open in your browser. In development mode
+> (`uv run reflex run`), other computers on your network can still load the interface's
+> code from port 3000, but not your data.
 
 ### Your first CV
 

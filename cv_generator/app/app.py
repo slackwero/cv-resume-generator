@@ -5,12 +5,17 @@ The theme is configured in rxconfig.py through RadixThemesPlugin.
 
 import reflex as rx
 
+from cv_generator.app.local_only import LocalOnlyMiddleware
 from cv_generator.app.pages import home, profile, sync, wizard
 
 # The whole interface is in English: this declares it, so a screen reader reads the
 # labels with the right pronunciation.
 app = rx.App(
     html_lang="en",
+    # The app has no login, so this wraps the whole backend (routes, the websocket and
+    # uploads) and refuses what does not come from the app's own page: another host name
+    # (DNS rebinding) and other websites open in the browser. See local_only.py.
+    api_transformer=LocalOnlyMiddleware,
     # The jackfield stylesheet: it declares the self-hosted typeface, themes the surfaces
     # the browser draws (selection, caret, scrollbars, focus ring) and defines the
     # geometry of the link rail.
