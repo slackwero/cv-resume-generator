@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # WeasyPrint renders the PDFs through these native libraries.
+      - name: Install native libraries (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
+      - name: Install native libraries (macOS)
+        if: runner.os == 'macOS'
+        run: brew install pango
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      # The first start installs the frontend, so it is slow.
+      - name: Smoke test the local-only protection
+        run: |
+          uv run reflex run > reflex.log 2>&1 &
+          uv run python scripts/smoke_local_only.py --timeout 600
+      - name: Show the app log
+        if: failure()
+        run: cat reflex.log
