@@ -35,11 +35,22 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
-      # The first start installs the frontend, so it is slow.
+      # The first start installs the frontend, so it is slow. The app is stopped at the end
+      # because a running `uv run` holds the uv cache lock, and setup-uv's post step (`uv cache
+      # prune`) would wait on it until it times out. `set -m` gives the app its own process
+      # group, so the whole tree (uv, reflex, bun, node) goes down together; the reflex process
+      # does not exit on SIGTERM, hence the SIGKILL after a short grace period.
       - name: Smoke test the local-only protection
         run: |
+          set -m
           uv run reflex run > reflex.log 2>&1 &
-          uv run python scripts/smoke_local_only.py --timeout 600
+          app=$!
+          rc=0
+          uv run python scripts/smoke_local_only.py --timeout 600 || rc=$?
+          kill -TERM -- "-$app" 2>/dev/null || true
+          for _ in $(seq 10); do kill -0 -- "-$app" 2>/dev/null || break; sleep 1; done
+          kill -KILL -- "-$app" 2>/dev/null || true
+          exit "$rc"
       - name: Show the app log
         if: failure()
         run: cat reflex.log || true
