@@ -5,9 +5,10 @@ things could still reach it from a browser on this very machine:
 
 - Other websites. A page open in another tab can make the browser call
   `http://localhost:8000`. fetch/XHR, form POSTs and websocket handshakes carry an
-  `Origin` header, and one that is not the app's own page is refused. Plain cross-site
-  GETs (images, iframes, scripts, navigations) carry no `Origin`, but modern browsers
-  mark them with `Sec-Fetch-Site: cross-site`, and that is what refuses them.
+  `Origin` header, and one that is not the app's own page is refused. Cross-site GETs
+  (images, iframes, scripts, navigations, and `fetch()` in no-cors mode) carry no
+  `Origin`, but modern browsers mark every one of them with `Sec-Fetch-Site:
+  cross-site`, and that is what refuses them.
 - DNS rebinding. A hostile domain is pointed at 127.0.0.1 after the page loads, so the
   browser treats the backend as the same origin. Its requests still carry the hostile
   domain in the `Host` header, which is what gives it away; the `Origin` rule also
@@ -15,6 +16,17 @@ things could still reach it from a browser on this very machine:
 
 A request with neither `Origin` nor `Sec-Fetch-Site` (curl, very old browsers) passes on
 the Host rule alone. That is why no backend GET may ever change state.
+
+Do not read a 200 on a foreign CORS preflight (`OPTIONS`) as a hole. Reflex wraps the
+transformed app in its own outer Starlette `CORSMiddleware` (`allow_origins=*`, with
+credentials), which answers preflights before this middleware sees them. The real
+request that follows still reaches this middleware and gets a 403, so the app's handler
+never runs.
+
+Known limit: in development mode the frontend is served by Vite on port 3000, outside
+this middleware, so another website can frame the live app in an iframe (clickjacking:
+it cannot read anything, only trick clicks). In the prod single-port mode the frontend
+is served through this middleware, so cross-site iframes are refused.
 
 The ports are read at request time, not at import: `reflex run` exports the real
 frontend and backend ports to the backend process as environment variables only when it

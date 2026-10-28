@@ -6,13 +6,18 @@ server (granian, bound by `rxconfig.py`) behaves the same way. Start the app fir
 
     uv run python scripts/smoke_local_only.py [--frontend-port 3000] [--backend-port 8000]
 
+The checks: the app answers, a foreign Host is refused, a foreign Origin is refused, a
+foreign websocket handshake is refused, and the backend is not reachable from the network.
+
 It prints one line per check (`PASS`, `FAIL` or `SKIP`) and exits 0 only when no check
 failed. CI runs it after starting the app, so the first start (which installs the
 frontend) can take minutes: it polls the health endpoint until `--timeout` runs out.
 """
 
 import argparse
+import base64
 import ipaddress
+import os
 import socket
 import sys
 import time
@@ -85,6 +90,39 @@ def check_not_reachable_from_network(backend_port: int) -> bool:
     return False
 
 
+def check_foreign_websocket_refused(backend_port: int) -> bool:
+    """A websocket upgrade from a foreign Origin must be answered with a 403.
+
+    The websocket carries every app event, so this is the door that matters most. The ASGI
+    unit tests cover the close code; this proves that the real server turns it into a 403
+    handshake. A raw socket is used because an HTTP client would not send the upgrade.
+    """
+    name = "foreign websocket refused"
+    request = (
+        "GET /_event/?EIO=4&transport=websocket HTTP/1.1\r\n"
+        f"Host: localhost:{backend_port}\r\n"
+        "Origin: http://evil.example\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        f"Sec-WebSocket-Key: {base64.b64encode(os.urandom(16)).decode()}\r\n"
+        "\r\n"
+    )
+    try:
+        with socket.create_connection((LOOPBACK, backend_port), timeout=CONNECT_TIMEOUT_SECONDS) as connection:
+            connection.settimeout(REQUEST_TIMEOUT_SECONDS)
+            connection.sendall(request.encode("ascii"))
+            status_line = connection.recv(1024).split(b"\r\n", 1)[0].decode("latin-1")
+    except OSError as error:
+        print(f"FAIL {name}: {type(error).__name__}: {error}")
+        return False
+    if status_line.split(" ")[1:2] == ["403"]:
+        print(f"PASS {name}")
+        return True
+    print(f"FAIL {name}: expected a 403 status line, got {status_line!r}")
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test the local-only protection of the running app.")
     parser.add_argument("--frontend-port", type=int, default=3000)
@@ -103,6 +141,7 @@ def main() -> int:
         expect_status("app answers", ping_url, own_page, 200),
         expect_status("foreign host refused", ping_url, {"Host": "evil.example"}, 403),
         expect_status("foreign origin refused", ping_url, {"Origin": "http://evil.example"}, 403),
+        check_foreign_websocket_refused(args.backend_port),
         check_not_reachable_from_network(args.backend_port),
     ]
     return 0 if all(results) else 1
