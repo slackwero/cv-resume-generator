@@ -50,6 +50,15 @@ installs the interface's dependencies; the next ones are quick.
 Everything stays on your machine: your profile and your CVs are saved in `data/` and the
 PDFs in `output/`, both excluded from git.
 
+> [!WARNING]
+> This app is meant to run only on your own computer, for one person. It has **no login
+> and no access control**: anyone who can open its address can see and change your
+> profile and your CVs. Do not deploy it to a public server.
+>
+> Even when you run it locally, Reflex listens on every network interface, so other
+> devices on the same network (an office or café Wi-Fi, for example) can reach it
+> through your computer's IP address. Run it on a network you trust.
+
 ### Your first CV
 
 1. **Sync** — upload your LinkedIn data. The best source is the ZIP export
