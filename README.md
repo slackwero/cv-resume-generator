@@ -16,6 +16,8 @@ when creating a CV, you tick which ones go in depending on the job you are apply
 for. The master profile is never modified, and every generated CV stays frozen exactly
 as it was sent.
 
+![The home page: every CV you generated, with its template, language and date](docs/screenshots/home.png)
+
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), the Python package
@@ -76,6 +78,21 @@ PDFs in `output/`, both excluded from git.
 3. **New CV** — a six-step wizard: template, application, presentation, experience, rest
    of the profile, and sections. Preview the paginated PDF, then generate it.
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/profile.png" alt="My profile page"><br>
+      <sub><b>My profile.</b> What LinkedIn does not provide, like the phone.</sub></td>
+    <td width="50%"><img src="docs/screenshots/wizard-template.png" alt="Wizard step 1, choosing the template"><br>
+      <sub><b>Step 1, template.</b> Every thumbnail is your own CV, really rendered.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/wizard-experience.png" alt="Wizard step 4, choosing the achievements"><br>
+      <sub><b>Step 4, experience.</b> Untick the achievements that do not help this application.</sub></td>
+    <td><img src="docs/screenshots/wizard-preview.png" alt="The paginated PDF preview"><br>
+      <sub><b>Preview.</b> The paginated PDF, before you generate it.</sub></td>
+  </tr>
+</table>
+
 The **Home** page lists every CV you generated, frozen exactly as you sent it, with the
 option to open, regenerate, clone or archive each one.
 
@@ -90,6 +107,8 @@ PDF. The content is whatever you wrote; the application does not translate text.
 
 In the application step you can paste the job ad's text. When you reach the end of the
 wizard you will see which terms the posting asks for and which do not appear in your CV.
+
+![The posting check: the share of the ad's terms already in the CV, and the missing ones](docs/screenshots/wizard-posting.png)
 
 No language model or external service is involved: terms are extracted by their
 **shape** and frequency. The main signal is capitalization in the middle of a sentence,
@@ -146,6 +165,8 @@ Five designs in `templates/`. Three are single-column, one per typographic voice
 bar with the photo, the contact details, the skills and the languages, and the body with
 the profile text and the work history. `direct` puts the name in a color band and each
 section in a row with its title on the left.
+
+![The five templates: direct, executive, modern, sidebar and technical](docs/screenshots/templates.png)
 
 `direct` is the template meant for ATS filters, and it declares `"ats": true` in its
 `meta.json`: the step 1 carousel gives it an "ATS" badge. An ATS template carries no
