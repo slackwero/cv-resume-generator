@@ -1,0 +1,16 @@
+{
+  "name": "Sidebar",
+  "description": "A color bar on the left with the photo, the contact details, the skills and the languages; the work history takes the body. For a CV with a photo that can be scanned at a glance.",
+  "supports_photo": true,
+  "line_height": 1.45,
+  "supported_sections": [
+    "profile",
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "courses",
+    "hobbies",
+    "references"
+  ]
+}

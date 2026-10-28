@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CV Generator">
+  <!--
+    The mark is the rail terminal: a line that arrives and ends in an open ring.
+    It is the smallest piece of the system that still means the same as in the
+    interface — a tied normal. No letters, so it holds up at 16px.
+  -->
+  <rect width="32" height="32" fill="#0a0a0a"/>
+  <g stroke="#ffb000" stroke-width="2" fill="none">
+    <path d="M4 16h13"/>
+    <circle cx="22" cy="16" r="5"/>
+  </g>
+</svg>

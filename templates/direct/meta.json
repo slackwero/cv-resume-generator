@@ -1,0 +1,17 @@
+{
+  "name": "Direct",
+  "description": "A color band with the name, and each section with its title on the left. A single reading line, real text and no photo: meant to get through ATS filters.",
+  "supports_photo": false,
+  "ats": true,
+  "line_height": 1.45,
+  "supported_sections": [
+    "profile",
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "courses",
+    "hobbies",
+    "references"
+  ]
+}

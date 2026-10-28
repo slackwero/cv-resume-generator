@@ -1,0 +1,192 @@
+{#
+  Markup shared by every template.
+
+  The HTML is single and semantic; each template stands out through its CSS. That way a
+  fix in the structure benefits all of them at once, instead of having to repeat it in
+  each one.
+
+  No template writes section labels: it always prints `section.title`, which the user
+  customizes in the wizard.
+
+  Dates are shown as "YYYY-MM — YYYY-MM". A current job closes the range with `present`,
+  the word in the CV language ("2025-06 — Present"): left open, it could not be told apart
+  from a job that is missing its end date.
+#}
+
+{% macro contact(cv, age) %}
+<ul class="contact">
+  <li class="contact__item contact__item--tel">{{ cv.personal.phone }}</li>
+  <li class="contact__item contact__item--mail">{{ cv.personal.email }}</li>
+  {% if cv.personal.website %}<li class="contact__item contact__item--web">{{ cv.personal.website }}</li>{% endif %}
+  {% if cv.personal.address %}<li class="contact__item">{{ cv.personal.address }}</li>{% endif %}
+  {% if cv.personal.country %}<li class="contact__item">{{ cv.personal.country }}</li>{% endif %}
+  {% if age %}<li class="contact__item">{{ age }}</li>{% endif %}
+</ul>
+{% endmacro %}
+
+
+{#
+  Labeled: each detail with its word above it ("Phone", "Email"), for the templates that
+  stack it in a narrow column. The captions arrive in the CV language.
+#}
+{% macro labeled_contact(cv, age, captions) %}
+<dl class="contact contact--labeled">
+  {% for caption, value in [
+       (captions.phone, cv.personal.phone),
+       (captions.email, cv.personal.email),
+       (captions.website, cv.personal.website),
+       (captions.address, cv.personal.address),
+       (captions.country, cv.personal.country),
+       (captions.age, age),
+     ] if value %}
+    <div class="contact__item">
+      <dt class="contact__caption">{{ caption }}</dt>
+      <dd class="contact__value">{{ value }}</dd>
+    </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+
+{# `with_photo` set to false is for the templates that draw the photo outside the header. #}
+{% macro header(cv, age, with_contact=true, with_photo=true) %}
+<header class="header">
+  {% if with_photo and cv.personal.photo %}<img class="header__photo" src="{{ cv.personal.photo }}" alt="">{% endif %}
+  <div class="header__text">
+    <h1 class="header__name">{{ cv.personal.first_name }} {{ cv.personal.last_name }}</h1>
+    <p class="header__profession">{{ cv.personal.profession }}</p>
+    {% if with_contact %}{{ contact(cv, age) }}{% endif %}
+  </div>
+</header>
+{% endmacro %}
+
+
+{% macro _section_body(cv, kind, present) %}
+  {% if kind == 'profile' %}
+    <p class="profile">{{ cv.profile }}</p>
+
+  {% elif kind == 'experience' %}
+    {#- `entry--with-place` lets a template put the dates after the place, on the same
+        line: with no place there is nothing to separate them from, and CSS cannot tell whether a child exists. -#}
+    {% for experience in cv.experiences %}
+      <article class="entry entry--experience{% if experience.location %} entry--with-place{% endif %}">
+        <div class="entry__header">
+          <div class="entry__identity">
+            <h3 class="entry__title">{{ experience.role }}</h3>
+            <p class="entry__sub">
+              {{ experience.company }}{% if experience.location %}<span class="entry__place">{{ experience.location }}</span>{% endif %}
+            </p>
+          </div>
+          <p class="entry__dates">{{ experience.start }} — {{ present if experience.current else experience.end or '' }}</p>
+        </div>
+        {% if experience.achievements %}
+          <ul class="achievements">
+            {% for achievement in experience.achievements %}<li>{{ achievement.text }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      </article>
+    {% endfor %}
+
+  {% elif kind == 'education' %}
+    {% for study in cv.education %}
+      <article class="entry entry--education">
+        <div class="entry__header">
+          <div class="entry__identity">
+            <h3 class="entry__title">{{ study.title }}</h3>
+            <p class="entry__sub">{{ study.institution }}</p>
+          </div>
+          {% if study.start or study.end %}
+            <p class="entry__dates">{{ study.start or '' }} — {{ study.end or '' }}</p>
+          {% endif %}
+        </div>
+      </article>
+    {% endfor %}
+
+  {% elif kind == 'skills' %}
+    <ul class="chips">
+      {% for skill in cv.skills %}
+        <li>{{ skill.name }}{% if skill.level %}<span class="chips__level">{{ skill.level }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+
+  {% elif kind == 'languages' %}
+    <ul class="chips chips--languages">
+      {% for language in cv.languages %}
+        <li>{{ language.language }}{% if language.level %}<span class="chips__level">{{ language.level }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+
+  {% elif kind == 'courses' %}
+    <ul class="list">
+      {% for course in cv.courses %}
+        <li>
+          <span class="list__main">{{ course.name }}</span>
+          {%- if course.institution %}<span class="list__secondary">{{ course.institution }}</span>{% endif %}
+          {%- if course.year %}<span class="list__meta">{{ course.year }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+
+  {% elif kind == 'hobbies' %}
+    <ul class="chips chips--hobbies">
+      {% for hobby in cv.hobbies %}<li>{{ hobby.text }}</li>{% endfor %}
+    </ul>
+
+  {% elif kind == 'references' %}
+    <ul class="list list--references">
+      {% for reference in cv.references %}
+        <li>
+          <span class="list__main">{{ reference.name }}</span>
+          {%- if reference.relationship %}<span class="list__secondary">{{ reference.relationship }}</span>{% endif %}
+          {%- if reference.phone %}<span class="list__meta">{{ reference.phone }}</span>{% endif %}
+          {%- if reference.email %}<span class="list__meta">{{ reference.email }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endmacro %}
+
+
+{# An empty section is not drawn: it avoids orphan titles with no content under them. #}
+{% macro _has_content(cv, kind) %}
+  {%- if kind == 'profile' -%}{{ 'yes' if cv.profile else '' }}
+  {%- elif kind == 'experience' -%}{{ 'yes' if cv.experiences else '' }}
+  {%- elif kind == 'education' -%}{{ 'yes' if cv.education else '' }}
+  {%- elif kind == 'skills' -%}{{ 'yes' if cv.skills else '' }}
+  {%- elif kind == 'languages' -%}{{ 'yes' if cv.languages else '' }}
+  {%- elif kind == 'courses' -%}{{ 'yes' if cv.courses else '' }}
+  {%- elif kind == 'hobbies' -%}{{ 'yes' if cv.hobbies else '' }}
+  {%- elif kind == 'references' -%}{{ 'yes' if cv.references else '' }}
+  {%- endif -%}
+{% endmacro %}
+
+
+{#
+  Draws the CV sections in their order.
+
+  `kinds` limits the block to a subset, for the two-column templates that place some
+  sections in the sidebar and others in the body.
+#}
+{% macro blocks(cv, present, kinds=none) %}
+  {% for section in cv.sections %}
+    {% if (kinds is none or section.kind in kinds) and _has_content(cv, section.kind)|trim %}
+      <section class="section section--{{ section.kind }}">
+        <h2 class="section__title">{{ section.title }}</h2>
+        <div class="section__body">{{ _section_body(cv, section.kind, present) }}</div>
+      </section>
+    {% endif %}
+  {% endfor %}
+{% endmacro %}
+
+
+{% macro document(cv, css, page_title) %}
+<!doctype html>
+<html lang="{{ cv.language | default('es', true) }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ page_title }}</title>
+  <style>{{ css | safe }}</style>
+</head>
+<body>{{ caller() }}</body>
+</html>
+{% endmacro %}

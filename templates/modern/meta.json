@@ -1,0 +1,16 @@
+{
+  "name": "Modern",
+  "description": "One column, a sober header and a clear typographic hierarchy. Meant for a quick read by a recruiter.",
+  "supports_photo": true,
+  "line_height": 1.45,
+  "supported_sections": [
+    "profile",
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "courses",
+    "hobbies",
+    "references"
+  ]
+}

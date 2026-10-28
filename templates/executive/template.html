@@ -1,0 +1,5 @@
+{% import "_macros.html" as m %}
+{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
+  {{ m.header(cv, age) }}
+  <main class="body">{{ m.blocks(cv, present) }}</main>
+{% endcall %}

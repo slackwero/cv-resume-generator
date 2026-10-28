@@ -1,0 +1,19 @@
+   
+Contactar
+correo@ejemplo.com
+www.linkedin.com/in/persona (LinkedIn)
+Languages
+Español (Native or Bilingual)
+Nombre Apellido
+Platform Engineer | SRE
+Madrid, España
+Extracto
+Systems engineer with ten years of experience running infrastructure and
+automating operations for the logistics and media industries.
+Experiencia
+Empresa Uno
+Platform Engineer
+abril de 2022 - Present (3 años 7 meses)
+Madrid
+- Moved the internal services to containers across the staging clusters
+- Wrote capacity alerts with Prometheus and shared the results with the team

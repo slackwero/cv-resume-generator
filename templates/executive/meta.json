@@ -1,0 +1,16 @@
+{
+  "name": "Executive",
+  "description": "Serif typography, lots of whitespace and centered titles. It conveys seniority and weight; meant for senior or leadership positions.",
+  "supports_photo": false,
+  "line_height": 1.55,
+  "supported_sections": [
+    "profile",
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "courses",
+    "hobbies",
+    "references"
+  ]
+}

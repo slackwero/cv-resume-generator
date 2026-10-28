@@ -1,0 +1,19 @@
+Contactar
+correo@ejemplo.com
+Languages
+Español (Native or Bilingual)
+Nombre Apellido
+Platform Engineer
+Madrid, España
+Experiencia
+Empresa Uno
+Platform Engineer
+abril de 2022 - Present (3 años 7 meses)
+Madrid
+- Introduced trunk-based development to speed up the releases with
+Flux
+- Rotated the service credentials for every internal registry using Vault and
+Consul
+- Maintained the team wiki and on-call runbooks (Notion, Miro, Slack)
+Tech stack: Azure, Linux, Prometheus, Grafana, Ansible, Go, Rust, Bash,
+Nginx, Kafka, Redis.

@@ -1,0 +1,28 @@
+{% import "_macros.html" as m %}
+{#
+  Sidebar: the photo, the contact and the short sections in a color bar on the left; the
+  name, the profile text and the work history in the body.
+
+  In the HTML the body comes before the bar, and the CSS grid places them. That way the
+  text an ATS extracts from the PDF starts with the name and the work history, and each
+  column keeps the section order chosen in the wizard. WeasyPrint does not split columns
+  made with flexbox or float across pages; with the grid it does.
+#}
+{% set in_sidebar = ['skills', 'languages', 'hobbies'] %}
+{% set in_body = ['experience', 'education', 'courses', 'references'] %}
+{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
+  <div class="sheet">
+    <div class="main">
+      <div class="band">
+        {{ m.header(cv, age, with_contact=false, with_photo=false) }}
+        {{ m.blocks(cv, present, ['profile']) }}
+      </div>
+      <main class="body">{{ m.blocks(cv, present, in_body) }}</main>
+    </div>
+    <aside class="sidebar">
+      {% if cv.personal.photo %}<img class="sidebar__photo" src="{{ cv.personal.photo }}" alt="">{% endif %}
+      {{ m.labeled_contact(cv, age, captions) }}
+      {{ m.blocks(cv, present, in_sidebar) }}
+    </aside>
+  </div>
+{% endcall %}

@@ -1,0 +1,11 @@
+{% import "_macros.html" as m %}
+{#
+  Direct: a color band with the name and, below, each section in a row with its title on
+  the left. Meant for ATS filters: the HTML is a single reading line (name, contact and
+  the sections in the wizard order), with no photo or sidebar, and each row's layout only
+  puts the title next to its content.
+#}
+{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
+  {{ m.header(cv, age, with_photo=false) }}
+  <main class="body">{{ m.blocks(cv, present) }}</main>
+{% endcall %}

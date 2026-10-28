@@ -1,0 +1,130 @@
+/* Direct: a color band with the name, and each section with its title on the left.
+ *
+ * What the CV can customize lives in the variables below, with the template's own values.
+ * The style chosen in the wizard then appends a second block that overrides only what was
+ * chosen. `--background` paints the band and `--tint` the secondary text on it; `--accent`
+ * the section titles. The scale multiplies every font size, not the margins.
+ *
+ * Meant for ATS filters: no photo, no reading columns and little letter spacing, so the
+ * text extracted from the PDF comes out whole and in order.
+ */
+:root {
+  --accent: #3b6b54;
+  --background: #3d5c4c;
+  --tint: #d5e3dc;
+  --heading-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --body-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --scale: 1;
+  --line-height: 1.45;
+  /* An entry is not split across pages. The CV style releases it when the font, the
+     size or the line height change; once released, the header stays with its first
+     achievement. */
+  --entry-break: avoid;
+  --break-after-header: auto;
+}
+
+/* The band reaches the edge of the paper: no side page margins, the body sets its own.
+   The first page starts at the band; the others, with a top margin. */
+@page { size: A4; margin: 14mm 0; }
+@page :first { margin-top: 0; }
+
+/* On screen the browser ignores @page; this repeats its margins so the wizard view looks
+   like the sheet. WeasyPrint paginates with the print medium and does not read it. */
+@media screen { body { padding: 0 0 14mm; } }
+
+* { box-sizing: border-box; }
+body { font-family: var(--body-font); font-size: calc(9.5pt * var(--scale));
+       line-height: var(--line-height); color: #2b2f33; margin: 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+/* --- Name band ------------------------------------------------------------------- */
+
+.header { background: var(--background); color: #ffffff; padding: 11mm 16mm 8mm; }
+.header__text { display: flex; flex-direction: column; }
+/* The profession shows above the name, but in the HTML it comes after: the extracted text
+   starts with the name, which is the first thing a filter looks for. */
+.header .header__profession { order: -1; color: var(--tint); margin: 0 0 1mm;
+                                     font-size: calc(10pt * var(--scale)); font-weight: 600; }
+.header .header__name { font-family: var(--heading-font); color: #ffffff;
+                                  font-size: calc(26pt * var(--scale)); font-weight: 700;
+                                  line-height: 1.1; margin: 0 0 3mm; }
+.header .contact { display: flex; flex-wrap: wrap; color: var(--tint);
+                        font-size: calc(8.5pt * var(--scale)); }
+.contact__item:not(:last-child)::after { content: "|"; margin: 0 2mm; }
+
+/* --- Sections ------------------------------------------------------------------------ */
+
+/* The title floats on the left and the content stays in the normal flow: WeasyPrint did
+   not split a grid row across pages, and the whole work history jumped to page 2. The
+   title column is wide so a typical title fits on one line even in monospace: split in
+   two, an ATS filter reads it as two labels. */
+.body { padding: 2mm 16mm 0; }
+.section { padding: 5mm 0; border-bottom: 0.3mm solid #dde2e0; }
+.section::after { content: ""; display: block; clear: both; }
+.section:last-child { border-bottom: 0; }
+.section__title { float: left; width: 48mm; font-family: var(--heading-font);
+                   color: var(--accent); margin: 0; font-size: calc(10pt * var(--scale));
+                   font-weight: 600; line-height: 1.3; }
+.section__body { margin-left: 55mm; }
+
+.profile { margin: 0; }
+
+/* Role and company on one line; place and dates on the next, separated by a bar. With
+   no place, the dates open the second line alone: that is why `entry--with-place`. */
+.entry { margin-bottom: 4.5mm;
+           break-inside: var(--entry-break); page-break-inside: var(--entry-break); }
+.entry:last-child { margin-bottom: 0; }
+.entry__header { display: block; }
+.entry__identity { display: inline; }
+.entry__title { display: inline; font-family: var(--heading-font); margin: 0;
+                   font-size: calc(8.8pt * var(--scale)); font-weight: 700;
+                   text-transform: uppercase; letter-spacing: 0.2pt; color: #22272b; }
+.entry__sub { display: inline; margin: 0; font-size: calc(8.8pt * var(--scale));
+                font-weight: 700; text-transform: uppercase; letter-spacing: 0.2pt;
+                color: #22272b; }
+.entry__sub::before { content: "|"; margin: 0 1.6mm; font-weight: 400; color: #6b757c; }
+.entry__place { font-size: calc(8pt * var(--scale)); font-weight: 400; color: #5f6b73; }
+.entry__place::before { content: "\A"; white-space: pre; }
+/* The bar hangs from the place and not from the dates: if a long place pushes the dates
+   to the next line, the bar stays at the end of its own line instead of opening the new one. */
+.entry__place::after { content: "|"; margin-left: 1.6mm; }
+.entry__dates { display: inline; margin: 0; font-size: calc(8pt * var(--scale));
+                   text-transform: uppercase; letter-spacing: 0.2pt; color: #5f6b73;
+                   white-space: nowrap; }
+.entry__dates::before { content: "\A"; white-space: pre; }
+.entry--with-place .entry__dates { margin-left: 1mm; }
+.entry--with-place .entry__dates::before { content: none; }
+
+.achievements { margin: 1.8mm 0 0; padding-left: 4.5mm; list-style: disc outside; }
+.achievements li { margin-bottom: 1.1mm; }
+
+/* The skill and hobby lists go on a single line that wraps, with bars. */
+.chips li { display: inline; }
+.chips li:not(:last-child)::after { content: "|"; margin: 0 2.2mm; color: #6b757c; }
+.chips__level { color: #5f6b73; }
+.chips__level::before { content: " ("; }
+.chips__level::after { content: ")"; }
+
+.chips--languages li { display: block; margin-bottom: 2.4mm; font-weight: 700;
+                     text-transform: uppercase; letter-spacing: 0.2pt;
+                     font-size: calc(8.8pt * var(--scale)); }
+.chips--languages li:not(:last-child)::after { content: none; }
+.chips--languages .chips__level { display: block; font-weight: 400;
+                                font-size: calc(8pt * var(--scale)); color: #5f6b73; }
+.chips--languages .chips__level::before, .chips--languages .chips__level::after { content: none; }
+
+.list li { margin-bottom: 2.4mm; }
+.list__main { display: block; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.2pt; font-size: calc(8.8pt * var(--scale)); }
+.list__secondary, .list__meta { font-size: calc(8.5pt * var(--scale)); color: #5f6b73; }
+.list__secondary + .list__meta::before,
+.list__meta + .list__meta::before { content: "|"; margin: 0 1.6mm; }
+
+/* Page break control. */
+body { orphans: 2; widows: 2; }
+.header { break-after: avoid; page-break-after: avoid; }
+.section__title { break-after: avoid; page-break-after: avoid; }
+.entry__header { break-after: var(--break-after-header);
+                     page-break-after: var(--break-after-header); }
+.achievements li, .list li { break-inside: avoid; page-break-inside: avoid; }
+.profile { orphans: 3; widows: 3; }

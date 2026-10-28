@@ -1,0 +1,58 @@
+   
+Contactar
+correo@ejemplo.com
+www.linkedin.com/in/persona-
+ejemplo-123 (LinkedIn)
+Aptitudes principales
+Kubernetes
+Terraform
+Continuous Integration and Delivery
+(CI/CD)
+Languages
+Español (Native or Bilingual)
+Inglés (Professional Working)
+Nombre Apellido
+Platform Engineer | SRE | Azure
+| Linux
+Área metropolitana de Madrid, Comunidad de Madrid, España
+Extracto
+Ingeniera con diez años de experiencia en operaciones de
+infraestructura y automatizacion.
+Experiencia
+Empresa Uno
+Platform Engineer - SRE
+abril de 2022 - Present (3 años 7 meses)
+Gran Madrid
+- Lleve los servicios internos a contenedores (AKS
+and ECS)
+- Escribi alertas de capacidad con Prometheus
+  Page 1 of 3
+   
+- Reduje el tiempo de despliegue a la mitad
+Empresa Dos
+SRE Lead
+octubre de 2020 - marzo de 2022 (1 año 6 meses)
+Provincia de Toledo
+- Mantuve los tableros de monitoreo del equipo
+Empresa Tres
+Technical Lead
+mayo de 2019 - septiembre de 2020 (1 año 5 meses)
+Área metropolitana de Madrid
+  Page 2 of 3
+   
+Coordine el equipo de soporte usando Kanban. Documente los procesos
+siguiendo la guia interna.
+Banco Agrupado C.A.
+6 años 2 meses
+Technical Lead
+febrero de 2015 - abril de 2019 (4 años 3 meses)
+Valencia
+Gestione el inventario de servidores del banco.
+Full Stack Engineer
+marzo de 2013 - enero de 2015 (1 año 11 meses)
+Valencia
+Automatice reportes internos con scripts.
+Educación
+Universidad de Ejemplo
+Ingeniero de Telecomunicaciones, Redes · (2007 - 2012)
+  Page 3 of 3

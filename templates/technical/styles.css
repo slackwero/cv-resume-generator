@@ -1,0 +1,95 @@
+/* Technical: monospace in the metadata, square tags, a terminal accent.
+ *
+ * What the CV can customize lives in the variables below, with the template's own values.
+ * The style chosen in the wizard then appends a second block that overrides only what was
+ * chosen; whatever was not touched keeps the value from here. The accent paints the
+ * profession, the section titles, the header border and the bullets. The scale multiplies
+ * every font size, not the margins.
+ *
+ * The monospace is what makes this template recognizable, so it does not change with the
+ * chosen font: it goes in `--data-font`, a variable of its own that the selector does not
+ * write. The chosen font reaches the name, the entry titles and the running text; the
+ * section titles are monospace and that is why they do not use `--heading-font`.
+ */
+:root {
+  --accent: #1a7f37;
+  --heading-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --body-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --data-font: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  --scale: 1;
+  --line-height: 1.45;
+  /* An entry is not split across pages. The CV style releases it when the font, the
+     size or the line height change, since they move where each line falls: a long entry
+     that does not fit jumps whole to the next page and leaves the first one with only the
+     header. Once released, the entry header stays with its first achievement.
+     With no style, or with only a color, this rule does not apply: an already generated
+     CV has to regenerate identical, even where its header was left alone. */
+  --entry-break: avoid;
+  --break-after-header: auto;
+}
+
+@page { size: A4; margin: 15mm 15mm; }
+
+/* On screen (the wizard's large view and thumbnails) the browser ignores @page:
+   without this the text touched the edge of the paper. WeasyPrint paginates with the
+   print medium, so the PDF does not change. */
+@media screen { body { padding: 15mm 15mm; } }
+
+* { box-sizing: border-box; }
+body { font-family: var(--body-font); font-size: calc(10pt * var(--scale));
+       line-height: var(--line-height); color: #24292f; margin: 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+.header { border-left: 4px solid var(--accent); padding-left: 5mm; margin-bottom: 7mm; }
+.header__photo { display: none; }
+.header__name { font-family: var(--heading-font); font-size: calc(20pt * var(--scale));
+                      font-weight: 700; margin: 0; }
+.header__profession { font-family: var(--data-font); font-size: calc(9.5pt * var(--scale));
+                         color: var(--accent); margin: 1mm 0 2.5mm; }
+.contact { font-family: var(--data-font); font-size: calc(8.2pt * var(--scale));
+            display: flex; flex-wrap: wrap; gap: 0 3mm; color: #57606a; }
+
+.section { margin-bottom: 5.5mm; }
+.section__title { font-family: var(--data-font); font-size: calc(9pt * var(--scale));
+                   font-weight: 700; color: var(--accent); margin: 0 0 2.5mm; }
+.section__title::before { content: "// "; color: #6d7883; }
+
+.profile { margin: 0; }
+
+.entry { margin-bottom: 3.5mm;
+           break-inside: var(--entry-break); page-break-inside: var(--entry-break); }
+.entry__header { display: flex; justify-content: space-between; align-items: baseline; gap: 5mm; }
+.entry__title { font-family: var(--heading-font); font-size: calc(10.5pt * var(--scale));
+                   font-weight: 700; margin: 0; }
+.entry__sub { margin: 0; color: #57606a; font-size: calc(9.5pt * var(--scale)); }
+.entry__place::before { content: " @ "; color: #6d7883; }
+.entry__dates { font-family: var(--data-font); font-size: calc(8.2pt * var(--scale));
+                   color: #57606a; white-space: nowrap; margin: 0;
+                   background: #f6f8fa; padding: 0.4mm 1.5mm; border-radius: 1mm; }
+
+.achievements { margin: 1.5mm 0 0; padding: 0; }
+.achievements li { margin-bottom: 1mm; padding-left: 4.5mm; position: relative; }
+.achievements li::before { content: "▸"; position: absolute; left: 0; color: var(--accent); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 1.2mm; }
+.chips li { font-family: var(--data-font); font-size: calc(8.2pt * var(--scale));
+            background: #f6f8fa; border: 1px solid #d0d7de; color: #24292f; padding: 0.6mm 1.8mm; }
+.chips__level { color: #57606a; }
+.chips__level::before { content: ":"; }
+
+.list li { margin-bottom: 1.2mm; }
+.list__main { font-weight: 600; }
+.list__secondary, .list__meta { color: #57606a;
+    font-family: var(--data-font); font-size: calc(8.5pt * var(--scale)); }
+.list__secondary::before, .list__meta::before { content: " · "; }
+
+/* Page break control. The templates already avoided splitting an entry in half, but none
+   kept a section title from being left alone at the foot of a page, nor a paragraph from
+   leaving a single stray line when changing pages. */
+body { orphans: 2; widows: 2; }
+.header { break-after: avoid; page-break-after: avoid; }
+.section__title { break-after: avoid; page-break-after: avoid; }
+.entry__header { break-after: var(--break-after-header);
+                     page-break-after: var(--break-after-header); }
+.achievements li, .list li { break-inside: avoid; page-break-inside: avoid; }
+.profile { orphans: 3; widows: 3; }

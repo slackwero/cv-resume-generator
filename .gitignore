@@ -1,0 +1,40 @@
+# The user's personal data: never versioned
+data/*.json
+data/cvs/*.json
+output/*.pdf
+assets/foto.*
+assets/photo.*
+# Backups of the user data taken before a format migration
+data/backup-*/
+# Reflex keeps the files uploaded from the interface here:
+# the LinkedIn PDF carries the user's whole CV.
+uploaded_files/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Reflex
+.states
+.web
+assets/external/
+reflex.lock/
+reflex.log
+*.db
+
+# Playwright verification screenshots
+.playwright-mcp/
+
+# Local work notes and tool state (design reviews, specs and plans from building it).
+# The design review screenshots show the app with the real profile loaded.
+.impeccable/
+.superpowers/
+.claude/
+docs/superpowers/
+
+# macOS
+.DS_Store

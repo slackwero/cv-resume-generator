@@ -1,0 +1,18 @@
+Contactar
+correo@ejemplo.com
+Languages
+Español (Native or Bilingual)
+Nombre Apellido
+Platform Engineer
+Madrid, España
+Experiencia
+Empresa Uno
+SRE Lead
+octubre de 2020 - marzo de 2022 (1 año 6 meses)
+Provincia de Santa Cruz de Tenerife, Comunidad Autónoma de Canarias, España
+- Ran the quarterly capacity reviews
+Empresa Dos
+Technical Lead
+mayo de 2019 - septiembre de 2020 (1 año 5 meses)
+Coordinated the support rotation from planning to review, including on-call analysis,
+runbook upkeep, and incident tracking.

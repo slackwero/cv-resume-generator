@@ -1,0 +1,20 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = [
+    "E",     # pycodestyle
+    "F",     # pyflakes
+    "I",     # isort
+    "S",     # bandit (security)
+    "B",     # bugbear
+    "UP",    # syntax modernization
+    "ASYNC", # async anti-patterns
+    "ANN",   # type annotations
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101"]  # assert is pytest's mechanism
+
+[format]
+quote-style = "double"
