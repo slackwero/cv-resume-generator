@@ -22,6 +22,8 @@ jobs:
       - name: Install native libraries (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
+      # No DYLD_FALLBACK_LIBRARY_PATH here on purpose: cv_generator/native_libs.py sets it in
+      # the process, and CI should take the same path as a real user's Mac.
       - name: Install native libraries (macOS)
         if: runner.os == 'macOS'
         run: brew install pango
