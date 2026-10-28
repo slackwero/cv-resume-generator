@@ -1,5 +1,7 @@
 # CV Generator
 
+[![Built with Claude Code](https://img.shields.io/badge/Built_with-Claude_Code-D97757?logo=claude&logoColor=white)](https://claude.com/product/claude-code)
+
 A local application that generates PDF résumés **tailored to each job application**,
 with an immutable history of what you actually sent.
 
@@ -31,8 +33,8 @@ Debian / Ubuntu line above; for a native install, follow WeasyPrint's guide link
 ## Installation
 
 ```bash
-git clone <this repository's URL> cv-generator
-cd cv-generator
+git clone https://github.com/slackwero/cv-resume-generator.git
+cd cv-resume-generator
 uv sync
 ```
 
@@ -261,3 +263,12 @@ Two records go with the code and are worth reading before touching it:
 - **`DESIGN.md`** — the interface's visual system, written from what was built and not
   from the intention. The law that governs it: state is carried by the stroke pattern,
   never by color.
+
+## Built with Claude Code
+
+This application was generated with [Claude Code](https://claude.com/product/claude-code),
+Anthropic's AI coding tool.
+
+## License
+
+[MIT](LICENSE): free to use, modify and share.
