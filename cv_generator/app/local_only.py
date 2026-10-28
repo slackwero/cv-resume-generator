@@ -4,11 +4,17 @@ The app has no login: whoever reaches the backend can read and rewrite the profi
 things could still reach it from a browser on this very machine:
 
 - Other websites. A page open in another tab can make the browser call
-  `http://localhost:8000`. The browser always sends an `Origin` header in that case, so
-  an Origin that is not the app's own page is refused.
+  `http://localhost:8000`. fetch/XHR, form POSTs and websocket handshakes carry an
+  `Origin` header, and one that is not the app's own page is refused. Plain cross-site
+  GETs (images, iframes, scripts, navigations) carry no `Origin`, but modern browsers
+  mark them with `Sec-Fetch-Site: cross-site`, and that is what refuses them.
 - DNS rebinding. A hostile domain is pointed at 127.0.0.1 after the page loads, so the
-  browser treats the backend as the same origin and sends no `Origin` at all. What gives
-  it away is the `Host` header, which still carries the hostile domain.
+  browser treats the backend as the same origin. Its requests still carry the hostile
+  domain in the `Host` header, which is what gives it away; the `Origin` rule also
+  catches its POSTs and websocket handshakes.
+
+A request with neither `Origin` nor `Sec-Fetch-Site` (curl, very old browsers) passes on
+the Host rule alone. That is why no backend GET may ever change state.
 
 The ports are read at request time, not at import: `reflex run` exports the real
 frontend and backend ports to the backend process as environment variables only when it
@@ -58,6 +64,15 @@ def is_allowed_origin(origin: str | None, ports: Collection[int]) -> bool:
         return False
 
 
+def is_allowed_fetch_site(fetch_site: str | None) -> bool:
+    """Whether a `Sec-Fetch-Site` header says the request is not from another site.
+
+    `None` (curl, old browsers), `same-origin`, `same-site` and `none` (a typed URL or a
+    bookmark) are allowed; only `cross-site` is refused.
+    """
+    return (fetch_site or "").lower() != "cross-site"
+
+
 def configured_ports() -> frozenset[int]:
     """The frontend and backend ports of the running app."""
     config = get_config()
@@ -83,4 +98,10 @@ class LocalOnlyMiddleware:
 
     def _is_allowed(self, scope: Scope) -> bool:
         headers = {name.decode("latin-1"): value.decode("latin-1") for name, value in scope["headers"]}
-        return is_local_host(headers.get("host")) and is_allowed_origin(headers.get("origin"), self._ports())
+        if not is_local_host(headers.get("host")):
+            return False
+        origin = headers.get("origin")
+        if origin is None:
+            # Without an Origin (a plain cross-site GET), Fetch Metadata tells who is calling.
+            return is_allowed_fetch_site(headers.get("sec-fetch-site"))
+        return is_allowed_origin(origin, self._ports())

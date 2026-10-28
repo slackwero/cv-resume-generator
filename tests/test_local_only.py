@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 from starlette.types import Lifespan
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from cv_generator.app.local_only import LocalOnlyMiddleware, is_allowed_origin, is_local_host
+from cv_generator.app.local_only import LocalOnlyMiddleware, is_allowed_fetch_site, is_allowed_origin, is_local_host
 
 
 @pytest.mark.parametrize("host", ["localhost", "localhost:8000", "127.0.0.1:3000", "LocalHost:8000"])
@@ -52,6 +52,16 @@ def test_foreign_origins_are_refused(origin: str) -> None:
     assert not is_allowed_origin(origin, {3000, 8000})
 
 
+@pytest.mark.parametrize("fetch_site", [None, "same-origin", "same-site", "none"])
+def test_fetch_sites_other_than_cross_site_are_allowed(fetch_site: str | None) -> None:
+    assert is_allowed_fetch_site(fetch_site)
+
+
+@pytest.mark.parametrize("fetch_site", ["cross-site", "CROSS-SITE"])
+def test_a_cross_site_fetch_is_refused(fetch_site: str) -> None:
+    assert not is_allowed_fetch_site(fetch_site)
+
+
 async def _home(_request: object) -> PlainTextResponse:
     return PlainTextResponse("ok")
 
@@ -78,6 +88,21 @@ def test_a_request_from_the_app_passes(client: TestClient) -> None:
 
 def test_a_request_without_origin_passes(client: TestClient) -> None:
     assert client.get("/").status_code == 200
+
+
+def test_a_cross_site_request_without_origin_is_refused(client: TestClient) -> None:
+    response = client.get("/", headers={"sec-fetch-site": "cross-site"})
+    assert response.status_code == 403
+    assert response.text == "CV Generator only accepts connections from this computer."
+
+
+def test_a_same_site_request_without_origin_passes(client: TestClient) -> None:
+    assert client.get("/", headers={"sec-fetch-site": "same-site"}).status_code == 200
+
+
+def test_the_origin_decides_over_the_fetch_site(client: TestClient) -> None:
+    headers = {"origin": "http://localhost:3000", "sec-fetch-site": "cross-site"}
+    assert client.get("/", headers=headers).status_code == 200
 
 
 def test_a_foreign_host_is_refused(client: TestClient) -> None:
