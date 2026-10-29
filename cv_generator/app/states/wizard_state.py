@@ -1026,15 +1026,16 @@ class WizardState(rx.State):
 
         Like `update_skills`, for the step 4 list. Only the achievements of this CV's jobs
         are refreshed: a new one comes in checked, a new copy comes in checked and unchecks
-        its original, a removed one leaves the selection, and every other check stays as
-        you left it.
+        its original, a removed one leaves the selection and hands its check to the copies
+        of it you kept, and every other check stays as you left it.
         """
         profile = load_profile(DATA_DIR)
         if profile is None or self._profile is None:
             return
 
-        self._profile = with_refreshed_achievements(self._profile, profile)
-        self.marked_achievements = refreshed_achievement_marks(self.marked_achievements, self._profile)
+        previous = self._profile
+        self._profile = with_refreshed_achievements(previous, profile)
+        self.marked_achievements = refreshed_achievement_marks(self.marked_achievements, previous, self._profile)
         self.achievements = _achievement_list(self._profile)
         self._flatten_for_ui(self._profile)
         self._invalidate_preview()
@@ -1312,19 +1313,40 @@ def with_refreshed_achievements(current: MasterProfile, on_disk: MasterProfile) 
     )
 
 
-def refreshed_achievement_marks(marks: dict[str, bool], profile: MasterProfile) -> dict[str, bool]:
+def refreshed_achievement_marks(
+    marks: dict[str, bool], previous: MasterProfile, profile: MasterProfile
+) -> dict[str, bool]:
     """Your checks over the refreshed achievements: kept, dropped when gone, new ones checked.
 
     A new copy comes in checked and unchecks its original: you duplicated it to tailor it,
     and the CV would otherwise say the same thing twice. A key that is gone is dropped, or
     the selection would name an achievement that no longer exists.
+
+    A checked one that is gone hands its check to the copies of it left in the job: you
+    deleted the original to keep the copy you adapted, and its place in this CV stays.
+    Only `previous`, the profile before the refresh, still says which copies pointed to it:
+    deleting an achievement makes them point elsewhere.
     """
+    remaining = {
+        _achievement_key(experience.id, achievement.id)
+        for experience in profile.experiences
+        for achievement in experience.achievements
+    }
+    heirs: set[str] = set()
+    for experience in previous.experiences:
+        for achievement in experience.achievements:
+            if achievement.copy_of is None:
+                continue
+            original = _achievement_key(experience.id, achievement.copy_of)
+            if original not in remaining and marks.get(original, False):
+                heirs.add(_achievement_key(experience.id, achievement.id))
+
     refreshed: dict[str, bool] = {}
     copied_originals: list[str] = []
     for experience in profile.experiences:
         for achievement in experience.achievements:
             key = _achievement_key(experience.id, achievement.id)
-            refreshed[key] = marks.get(key, True)
+            refreshed[key] = key in heirs or marks.get(key, True)
             original = _original_in_its_job(achievement, experience)
             if key not in marks and original is not None:
                 copied_originals.append(_achievement_key(experience.id, original))

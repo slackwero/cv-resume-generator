@@ -104,6 +104,7 @@ def test_refresh_keeps_your_checks_and_checks_new_ones() -> None:
         _key("exp-acme", "triage"): True,
         _key("exp-north", "pipes"): False,
     }
+    previous = _profile(_acme(_linkedin("scan", SCAN), _linkedin("triage", TRIAGE)), _north())
     refreshed = _profile(
         _acme(
             _linkedin("scan", SCAN),
@@ -113,7 +114,7 @@ def test_refresh_keeps_your_checks_and_checks_new_ones() -> None:
         _north(),
     )
 
-    assert refreshed_achievement_marks(marks, refreshed) == {
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {
         _key("exp-acme", "scan"): False,
         _key("exp-acme", "triage"): True,
         _key("exp-acme", "rag"): True,
@@ -127,9 +128,10 @@ def test_refresh_drops_deleted_achievements() -> None:
         _key("exp-acme", "triage"): True,
         _key("exp-north", "pipes"): True,
     }
+    previous = _profile(_acme(_linkedin("scan", SCAN), _linkedin("triage", TRIAGE)), _north())
     refreshed = _profile(_acme(_linkedin("scan", SCAN)), _north())
 
-    result = refreshed_achievement_marks(marks, refreshed)
+    result = refreshed_achievement_marks(marks, previous, refreshed)
 
     assert _key("exp-acme", "triage") not in result
     assert result == {_key("exp-acme", "scan"): True, _key("exp-north", "pipes"): True}
@@ -137,9 +139,10 @@ def test_refresh_drops_deleted_achievements() -> None:
 
 def test_refresh_checks_a_new_copy_and_unchecks_its_original() -> None:
     marks = {_key("exp-acme", "scan"): True}
+    previous = _profile(_acme(_linkedin("scan", SCAN)))
     refreshed = _profile(_acme(_linkedin("scan", SCAN), Achievement(id="copy-1", text=SCAN, copy_of="scan")))
 
-    assert refreshed_achievement_marks(marks, refreshed) == {
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {
         _key("exp-acme", "scan"): False,
         _key("exp-acme", "copy-1"): True,
     }
@@ -147,12 +150,41 @@ def test_refresh_checks_a_new_copy_and_unchecks_its_original() -> None:
 
 def test_refresh_does_not_check_an_original_you_had_unchecked() -> None:
     marks = {_key("exp-acme", "scan"): False}
+    previous = _profile(_acme(_linkedin("scan", SCAN)))
     refreshed = _profile(_acme(_linkedin("scan", SCAN), Achievement(id="copy-1", text=SCAN, copy_of="scan")))
 
-    assert refreshed_achievement_marks(marks, refreshed) == {
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {
         _key("exp-acme", "scan"): False,
         _key("exp-acme", "copy-1"): True,
     }
+
+
+def test_a_copy_placed_above_its_original_still_unchecks_it() -> None:
+    marks = {_key("exp-acme", "scan"): True}
+    previous = _profile(_acme(_linkedin("scan", SCAN)))
+    refreshed = _profile(_acme(Achievement(id="copy-1", text=SCAN, copy_of="scan"), _linkedin("scan", SCAN)))
+
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {
+        _key("exp-acme", "copy-1"): True,
+        _key("exp-acme", "scan"): False,
+    }
+
+
+def test_refresh_gives_a_deleted_originals_check_to_its_copy() -> None:
+    """You deleted the original to keep the copy you adapted: it takes the original's place in this CV."""
+    marks = {_key("exp-acme", "scan"): True, _key("exp-acme", "copy-1"): False}
+    previous = _profile(_acme(_linkedin("scan", SCAN), Achievement(id="copy-1", text=SCAN, copy_of="scan")))
+    refreshed = _profile(_acme(Achievement(id="copy-1", text=SCAN, copy_of=None)))
+
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {_key("exp-acme", "copy-1"): True}
+
+
+def test_refresh_does_not_check_a_copy_whose_unchecked_original_was_deleted() -> None:
+    marks = {_key("exp-acme", "scan"): False, _key("exp-acme", "copy-1"): False}
+    previous = _profile(_acme(_linkedin("scan", SCAN), Achievement(id="copy-1", text=SCAN, copy_of="scan")))
+    refreshed = _profile(_acme(Achievement(id="copy-1", text=SCAN, copy_of=None)))
+
+    assert refreshed_achievement_marks(marks, previous, refreshed) == {_key("exp-acme", "copy-1"): False}
 
 
 def test_refreshed_profile_updates_this_cvs_jobs_only() -> None:
