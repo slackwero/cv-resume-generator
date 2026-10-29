@@ -14,7 +14,7 @@ from cv_generator.app.config import (
     OUTPUT_DIR,
 )
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
-from cv_generator.models.profile import MasterProfile
+from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
 from cv_generator.models.style import FontSize, PaletteColor, Style, StyleFont
 from cv_generator.rendering.i18n import (
@@ -89,6 +89,19 @@ SIZES = [{"key": str(size), "name": SIZE_NAMES[size]} for size in FontSize]
 
 def _achievement_key(experience_id: str, achievement_id: str) -> str:
     return f"{experience_id}|{achievement_id}"
+
+
+def _achievement_list(profile: MasterProfile) -> list[dict[str, str]]:
+    """Every achievement of the profile, in its order, with the job it hangs from."""
+    return [
+        {
+            "key": _achievement_key(experience.id, achievement.id),
+            "experience_id": experience.id,
+            "text": achievement.text,
+        }
+        for experience in profile.experiences
+        for achievement in experience.achievements
+    ]
 
 
 def vars_from_style(style: Style) -> dict[str, str | float]:
@@ -261,7 +274,7 @@ class WizardState(rx.State):
         clone_from = self.router.page.params.get("from", "")
         if clone_from:
             self._apply_previous_recipe(clone_from)
-            # The thumbnails were drawn with everything checked; the recipe may have changed that.
+            # The thumbnails were drawn with the starting checks; the recipe may have changed them.
             self._refresh_thumbnails()
         self._refresh_large_view()
 
@@ -378,15 +391,7 @@ class WizardState(rx.State):
             }
             for experience in profile.experiences
         ]
-        self.achievements = [
-            {
-                "key": _achievement_key(experience.id, achievement.id),
-                "experience_id": experience.id,
-                "text": achievement.text,
-            }
-            for experience in profile.experiences
-            for achievement in experience.achievements
-        ]
+        self.achievements = _achievement_list(profile)
         self.skills = [{"id": h.id, "name": h.name} for h in profile.skills]
         # The full text always travels: choosing the paragraph that heads your CV from a
         # 220-character excerpt is choosing blind. The excerpt is only the folded view, and the
@@ -430,6 +435,7 @@ class WizardState(rx.State):
                     # Experience rows have no origin, but the key travels anyway: `rx.foreach` walks a
                     # single dict type and does not like some rows carrying keys others do not.
                     "origin": "",
+                    "yours": "",
                 }
             )
             # Each achievement knows which experience it hangs from: when the experience is
@@ -456,6 +462,9 @@ class WizardState(rx.State):
                         if achievement.imported_value and achievement.imported_value != achievement.text
                         else ""
                     ),
+                    # You wrote it, or it is a copy: LinkedIn never brought it. Text and not bool,
+                    # like the rest of the row.
+                    "yours": "yes" if achievement.imported_value is None else "",
                 }
                 for achievement in experience.achievements
             ]
@@ -478,8 +487,12 @@ class WizardState(rx.State):
         self.other_rows = others
 
     def _mark_all(self, profile: MasterProfile) -> None:
-        """Starts with everything included: discarding is faster than finding and checking."""
-        self.marked_achievements = {achievement["key"]: True for achievement in self.achievements}
+        """Starts with everything included: discarding is faster than finding and checking.
+
+        Except the copies: a copy next to its original would put the same achievement twice
+        in the CV, so it starts unchecked.
+        """
+        self.marked_achievements = initial_achievement_marks(profile)
         self.marked_items = {
             **{experience.id: True for experience in profile.experiences},
             **{skill.id: True for skill in profile.skills},
@@ -994,8 +1007,7 @@ class WizardState(rx.State):
         My profile opens in another tab because going back to /new restarts the wizard and
         you would lose the half-built CV. New ones come in checked and at the end, and
         everything else you chose is untouched. Only the skills are refreshed from the
-        profile: this CV's experience and achievement lists were built from the profile as
-        it was when you opened it.
+        profile: the achievements have their own button, `update_achievements`.
         """
         profile = load_profile(DATA_DIR)
         if profile is None or self._profile is None:
@@ -1006,6 +1018,25 @@ class WizardState(rx.State):
         new_items = [h.id for h in profile.skills if h.id not in self.skill_order]
         self.skill_order = _order_with_profile(self.skill_order, [h.id for h in profile.skills])
         self.marked_items = {**self.marked_items, **dict.fromkeys(new_items, True)}
+        self._invalidate_preview()
+
+    @rx.event
+    def update_achievements(self) -> None:
+        """Brings in the achievements you edited, duplicated, added or removed in My profile.
+
+        Like `update_skills`, for the step 4 list. Only the achievements of this CV's jobs
+        are refreshed: a new one comes in checked, a new copy comes in checked and unchecks
+        its original, a removed one leaves the selection, and every other check stays as
+        you left it.
+        """
+        profile = load_profile(DATA_DIR)
+        if profile is None or self._profile is None:
+            return
+
+        self._profile = with_refreshed_achievements(self._profile, profile)
+        self.marked_achievements = refreshed_achievement_marks(self.marked_achievements, self._profile)
+        self.achievements = _achievement_list(self._profile)
+        self._flatten_for_ui(self._profile)
         self._invalidate_preview()
 
     # ------------------------------------------------- bulk actions
@@ -1239,6 +1270,69 @@ def _order_with_profile(order: list[str], profile_ids: list[str]) -> list[str]:
     """Keeps the order you chose, drops what is gone and appends what is new."""
     present_items = [item for item in order if item in profile_ids]
     return [*present_items, *[item for item in profile_ids if item not in order]]
+
+
+def _original_in_its_job(achievement: Achievement, experience: Experience) -> str | None:
+    """The id of the achievement it was duplicated from, if that one is still in the same job."""
+    if any(other.id == achievement.copy_of for other in experience.achievements):
+        return achievement.copy_of
+    return None
+
+
+def initial_achievement_marks(profile: MasterProfile) -> dict[str, bool]:
+    """Everything checked, except a copy whose original is still in the same job.
+
+    A copy says nearly what its original says: with both checked, the CV would repeat
+    the same achievement twice. If the original is gone, the copy is all that is left.
+    """
+    return {
+        _achievement_key(experience.id, achievement.id): _original_in_its_job(achievement, experience) is None
+        for experience in profile.experiences
+        for achievement in experience.achievements
+    }
+
+
+def with_refreshed_achievements(current: MasterProfile, on_disk: MasterProfile) -> MasterProfile:
+    """This CV's jobs with the achievements they have on disk now.
+
+    A job that is new on disk is not added: the experience list was chosen with the
+    profile as it was, and only the achievements are refreshed. A job that is gone from
+    disk keeps what it had.
+    """
+    achievements = {experience.id: experience.achievements for experience in on_disk.experiences}
+    return current.model_copy(
+        update={
+            "experiences": [
+                experience.model_copy(update={"achievements": achievements[experience.id]})
+                if experience.id in achievements
+                else experience
+                for experience in current.experiences
+            ]
+        }
+    )
+
+
+def refreshed_achievement_marks(marks: dict[str, bool], profile: MasterProfile) -> dict[str, bool]:
+    """Your checks over the refreshed achievements: kept, dropped when gone, new ones checked.
+
+    A new copy comes in checked and unchecks its original: you duplicated it to tailor it,
+    and the CV would otherwise say the same thing twice. A key that is gone is dropped, or
+    the selection would name an achievement that no longer exists.
+    """
+    refreshed: dict[str, bool] = {}
+    copied_originals: list[str] = []
+    for experience in profile.experiences:
+        for achievement in experience.achievements:
+            key = _achievement_key(experience.id, achievement.id)
+            refreshed[key] = marks.get(key, True)
+            original = _original_in_its_job(achievement, experience)
+            if key not in marks and original is not None:
+                copied_originals.append(_achievement_key(experience.id, original))
+    # Unchecked after the walk and not during it: in My profile a copy can be moved above
+    # its original, and the original's own pass would put its old check back.
+    for key in copied_originals:
+        refreshed[key] = False
+    return refreshed
 
 
 def _move(elements: list[str], element: str, scroll_offset: int) -> list[str]:

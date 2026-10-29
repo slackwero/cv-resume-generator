@@ -304,6 +304,25 @@ def status_mark(text: str | rx.Var, on: rx.Var | bool = False, **props: object) 
     return rx.el.span(text, style=style, **props)
 
 
+def tag(label: str, color: str = AMBER, *, solid: bool = False) -> rx.Component:
+    """Outlined in `color`, or a solid plate of it with the text in glass.
+
+    It says where an achievement comes from ("LinkedIn", "Edited", "Yours"), the same in
+    My profile and in the wizard.
+    """
+    return rx.el.span(
+        label,
+        style={
+            **style_legend(GLASS if solid else color),
+            "border": f"1px solid {color}",
+            "background": color if solid else "transparent",
+            "padding": "0.125rem 0.375rem",
+            "white_space": "nowrap",
+            "flex": "0 0 auto",
+        },
+    )
+
+
 # --- Controls --------------------------------------------------------------------
 
 

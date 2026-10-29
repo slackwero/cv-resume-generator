@@ -41,6 +41,7 @@ from cv_generator.app.styles import (
     secondary_button,
     secondary_link,
     style_legend,
+    tag,
     touch_target,
 )
 
@@ -1276,19 +1277,28 @@ def _experience_row(row: rx.Var) -> rx.Component:
                 disabled=~active,
             ),
             rx.el.div(
-                rx.el.label(
-                    row["text"],
-                    html_for=achievement_id,
-                    style={
-                        "font_stretch": "100%",
-                        "font_size": "0.875rem",
-                        "line_height": "1.55",
-                        "cursor": "pointer",
-                        "display": "block",
-                        # Dim with a system tone and not with opacity: 0.45 on this body leaves the contrast
-                        # well below AA.
-                        "color": rx.cond(active, TEXT, TEXT_MUTED),
-                    },
+                rx.el.div(
+                    # You wrote it or duplicated it in My profile, tagged the same as there. A copy
+                    # starts unchecked, and the tag is what tells it apart from its original.
+                    rx.cond(row["yours"] == "yes", tag("Yours", solid=True), rx.fragment()),
+                    rx.el.label(
+                        row["text"],
+                        html_for=achievement_id,
+                        style={
+                            "font_stretch": "100%",
+                            "font_size": "0.875rem",
+                            "line_height": "1.55",
+                            "cursor": "pointer",
+                            "display": "block",
+                            # It grows to the end of the row, which is the click target.
+                            "flex": "1 1 auto",
+                            "min_width": "0",
+                            # Dim with a system tone and not with opacity: 0.45 on this body leaves the
+                            # contrast well below AA.
+                            "color": rx.cond(active, TEXT, TEXT_MUTED),
+                        },
+                    ),
+                    style={"display": "flex", "align_items": "baseline", "gap": "0.625rem"},
                 ),
                 # What this achievement would close from the posting. It turns the analysis into the
                 # selection tool instead of a bulletin at the end of the wizard.
@@ -1358,6 +1368,7 @@ def experience_step() -> rx.Component:
             "not touched: what you discard will still be available for the next CV."
         ),
         _achievement_actions(),
+        _profile_shortcut("experience", WizardState.update_achievements),
         rx.el.div(
             rx.foreach(WizardState.guided_experience_rows, _experience_row),
             style={"border": f"1px solid {RULE_LINE}", "padding": "0.25rem 1.125rem 1rem", "width": "100%"},
@@ -1441,11 +1452,12 @@ def _skill_row(skill: rx.Var, index: rx.Var) -> rx.Component:
     )
 
 
-def _skills_shortcut() -> rx.Component:
-    """Go create or edit skills without losing the half-built CV.
+def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler) -> rx.Component:
+    """Go create or edit skills or achievements without losing the half-built CV.
 
-    My profile opens in another tab: going back to /new restarts the wizard. On return,
-    "Refresh list" brings in what you changed without touching the rest of your choices.
+    My profile opens in another tab, on the subsection of this list: going back to /new
+    restarts the wizard. On return, "Refresh list" brings in what you changed without
+    touching the rest of your choices.
     """
     return rx.el.div(
         rx.link(
@@ -1454,14 +1466,14 @@ def _skills_shortcut() -> rx.Component:
                 rx.el.span("Add or edit in your profile"),
                 style={"display": "flex", "align_items": "center", "gap": "0.375rem"},
             ),
-            href="/profile",
+            href=f"/profile?section={section}",
             is_external=True,
             style={**style_legend(AMBER), "text_decoration": "underline", "text_underline_offset": "0.2em"},
         ),
         secondary_button(
             rx.icon("refresh_cw", size=13, stroke_width=1.75),
             "Refresh list",
-            on_click=WizardState.update_skills,
+            on_click=on_refresh,
             style={"min_height": "2rem", "padding": "0 0.75rem", "font_size": "0.625rem"},
         ),
         style={
@@ -1517,7 +1529,7 @@ def other_sections_step() -> rx.Component:
         rx.el.div(
             panel(
                 legend("Skills", color=AMBER),
-                _skills_shortcut(),
+                _profile_shortcut("skills", WizardState.update_skills),
                 rx.el.div(
                     rx.foreach(WizardState.sorted_skills, _skill_row),
                     style={"margin_top": "0.5rem"},

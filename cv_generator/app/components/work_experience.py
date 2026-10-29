@@ -15,7 +15,6 @@ import reflex as rx
 from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.styles import (
     AMBER,
-    GLASS,
     RULE_LINE,
     TEXT,
     TEXT_FAINT,
@@ -26,7 +25,7 @@ from cv_generator.app.styles import (
     panel,
     primary_button,
     secondary_button,
-    style_legend,
+    tag,
     touch_target,
 )
 
@@ -47,27 +46,12 @@ _VISUALLY_HIDDEN = {
 }
 
 
-def _tag(label: str, color: str = AMBER, *, solid: bool = False) -> rx.Component:
-    """Outlined in `color`, or a solid plate of it with the text in glass."""
-    return rx.el.span(
-        label,
-        style={
-            **style_legend(GLASS if solid else color),
-            "border": f"1px solid {color}",
-            "background": color if solid else "transparent",
-            "padding": "0.125rem 0.375rem",
-            "white_space": "nowrap",
-            "flex": "0 0 auto",
-        },
-    )
-
-
 def _origin_tag(origin: rx.Var) -> rx.Component:
     return rx.match(
         origin,
-        ("linkedin", _tag("LinkedIn", TEXT_MUTED)),
-        ("edited", _tag("Edited")),
-        ("yours", _tag("Yours", solid=True)),
+        ("linkedin", tag("LinkedIn", TEXT_MUTED)),
+        ("edited", tag("Edited")),
+        ("yours", tag("Yours", solid=True)),
         rx.fragment(),
     )
 
