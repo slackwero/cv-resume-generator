@@ -46,6 +46,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     seen = Calls()
     monkeypatch.setenv("UV", "/x/uv")
     monkeypatch.setattr(launcher_main, "install_stop_signals", lambda: None)
+    monkeypatch.setattr(launcher_main, "_ignore_stop_signals", lambda: None)
     monkeypatch.setattr(app, "port_state", lambda port: app.PortState.FREE)
     monkeypatch.setattr(prerequisites, "folder_problem", lambda folder: None)
     monkeypatch.setattr(prerequisites, "required_prerequisites", lambda: [present()])
@@ -317,3 +318,52 @@ def test_the_module_runs_as_a_program(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 2
+
+
+def test_an_error_after_the_app_started_still_stops_it(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeProcess()
+    monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
+
+    def broken(url: str) -> bool:
+        raise RuntimeError("no browser")
+
+    monkeypatch.setattr(app, "open_browser", broken)
+    assert main([], folder=tmp_path) == 1
+    assert calls.stopped == [fake]
+    assert "Something went wrong" in capsys.readouterr().out
+
+
+def test_a_second_ctrl_c_while_stopping_does_not_abort_the_stop(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeProcess()
+    monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
+    attempts: list[object] = []
+
+    def impatient(process: object, *args: object, **kwargs: object) -> None:
+        attempts.append(process)
+        if len(attempts) == 1:
+            raise KeyboardInterrupt
+        calls.stopped.append(process)
+
+    monkeypatch.setattr(app, "stop_app", impatient)
+    assert main([], folder=tmp_path) == 0
+    assert calls.stopped == [fake]
+    out = capsys.readouterr().out
+    assert "CV Generator stopped." in out
+    assert "Traceback" not in out
+
+
+def test_a_folder_that_cannot_be_written_is_explained_plainly(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def denied(folder: Path) -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(console, "open_log", denied)
+    assert main([], folder=tmp_path) == 1
+    out = capsys.readouterr().out
+    assert f"CV Generator cannot write in its own folder ({tmp_path})." in out
+    assert "Traceback" not in out

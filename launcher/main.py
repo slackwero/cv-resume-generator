@@ -121,8 +121,7 @@ def _run(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subp
         port, process, on_wait=lambda s: console.say(f"Still starting ({int(s // 60)} min)...")
     )
     if not ready:
-        app.stop_app(process)
-        started.clear()
+        _stop_started(started)
         raise _Failure(f"CV Generator could not start. The details are in {log_path}.")
 
     opened = True if args.no_browser else app.open_browser(url)
@@ -136,23 +135,53 @@ def _run(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subp
     raise _Failure(f"CV Generator stopped unexpectedly. The details are in {log_path}.")
 
 
+def _ignore_stop_signals() -> None:
+    """Lets the cleanup finish when the person presses Ctrl+C again.
+
+    The launcher is about to exit, so nothing is restored afterwards.
+    """
+    names = ("SIGBREAK",) if sys.platform == "win32" else ("SIGINT", "SIGTERM", "SIGHUP")
+    for name in names:
+        signal.signal(getattr(signal, name), signal.SIG_IGN)
+
+
+def _stop_started(started: list[subprocess.Popen[bytes]]) -> None:
+    """Stops every app this run started, however it got here."""
+    _ignore_stop_signals()
+    while started:
+        process = started[0]
+        try:
+            app.stop_app(process)
+        except KeyboardInterrupt:
+            continue  # a signal slipped in before it was ignored: stop again
+        started.pop(0)
+
+
 def main(argv: Sequence[str] | None = None, folder: Path = PROJECT_FOLDER) -> int:
     """Runs the launcher; returns the exit code."""
     args = _parse(argv)
     install_stop_signals()
+    try:
+        log = console.open_log(folder)
+    except OSError:
+        console.say(
+            f"CV Generator cannot write in its own folder ({folder}). "
+            "Move the folder somewhere you can write to, for example your Documents folder, and start it again."
+        )
+        return 1
     started: list[subprocess.Popen[bytes]] = []
-    with console.open_log(folder) as log:
+    with log:
         try:
             return _run(args, folder, log, started)
         except _Failure as failure:
             console.say(str(failure))
             return 1
         except KeyboardInterrupt:
-            for process in started:
-                app.stop_app(process)
+            _stop_started(started)
             console.say("CV Generator stopped.")
             return 0
         except Exception:
+            _stop_started(started)
             traceback.print_exc(file=log)
             console.say(
                 f"Something went wrong while starting CV Generator. The details are in {folder / console.LOG_NAME}."
