@@ -9,7 +9,12 @@
 set -u
 set -o pipefail
 
-cd "$(dirname "$0")" || exit 1
+# macOS asks whether Terminal may open a folder such as Downloads; if the answer was no,
+# cd fails, and bash's own error would mean nothing to the person.
+if ! cd "$(dirname "$0")" 2>/dev/null; then
+    echo "CV Generator cannot open its own folder. If macOS asked whether Terminal may access this folder, allow it in System Settings > Privacy & Security > Files and Folders, then start CV Generator again."
+    exit 1
+fi
 
 # --yes means "do not ask". It is also handed to the launcher, so every
 # argument reaches it unchanged.
