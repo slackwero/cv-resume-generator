@@ -11,10 +11,13 @@ and what arrives now tells the four real cases apart:
     text == origin  and  incoming != origin   -> changed on LinkedIn, safe to apply
     text != origin  and  incoming == origin   -> you edited it, LinkedIn did not change
     text != origin  and  incoming != origin   -> conflict, the user decides
+
+Achievements the owner added or duplicated (no `imported_value`) never take part, and
+a LinkedIn one the owner deleted is not proposed again.
 """
 
 import difflib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import StrEnum
 from typing import Any
 
@@ -110,8 +113,13 @@ def _diff_texts[T: Achievement | ProfileText](
     existing_items: list[T],
     incoming_items: list[T],
     experience_id: str | None = None,
+    dismissed: Sequence[str] = (),
 ) -> list[Change]:
-    """Compares two lists of free-text items (achievements or profile texts)."""
+    """Compares two lists of free-text items (achievements or profile texts).
+
+    `dismissed` are texts the owner deleted: an incoming item that matches none of the
+    existing ones but is similar to one of those produces no change at all.
+    """
     changes: list[Change] = []
     available = list(existing_items)
 
@@ -120,6 +128,8 @@ def _diff_texts[T: Achievement | ProfileText](
         prefix = f"{section}:{experience_id}" if experience_id else section
 
         if existing is None:
+            if any(_similarity(incoming.text, text) >= SIMILARITY_THRESHOLD for text in dismissed):
+                continue
             changes.append(
                 Change(
                     key=f"{prefix}:new:{incoming.id}",
@@ -244,7 +254,16 @@ def _diff_experiences(profile: MasterProfile, draft: ProfileDraft) -> list[Chang
                 target_id=existing.id,
             )
         )
-        changes += _diff_texts("achievements", existing.achievements, incoming.achievements, existing.id)
+        # Only what came from LinkedIn takes part: a copy or an achievement of your own
+        # would otherwise be matched, and proposed for change, as if LinkedIn had it.
+        from_linkedin = [a for a in existing.achievements if a.imported_value is not None]
+        changes += _diff_texts(
+            "achievements",
+            from_linkedin,
+            incoming.achievements,
+            existing.id,
+            dismissed=existing.dismissed_achievements,
+        )
 
     return changes
 

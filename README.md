@@ -202,6 +202,10 @@ situations apart:
 | ≠ origin | = origin | you edited it, it is respected |
 | ≠ origin | ≠ origin | **conflict**, arrives unchecked and you decide |
 
+The achievements you add or duplicate in My profile never take part: the sync only
+compares against the ones that came from LinkedIn. One you delete is remembered, so the
+sync does not offer it again.
+
 ## Templates
 
 Five designs in `templates/`. Three are single-column, one per typographic voice:

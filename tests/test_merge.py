@@ -3,6 +3,7 @@ import pytest
 from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.merge import Change, ChangeKind, apply_changes, compute_diff
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
+from cv_generator.services.achievements import add_achievement, duplicate_achievement, remove_achievement
 from cv_generator.services.skills import remove_skill, rename_skill
 from tests.test_models_personal import REQUIRED
 
@@ -245,3 +246,62 @@ def test_a_new_linkedin_skill_keeps_being_proposed(empty_profile: MasterProfile)
         "Kubernetes": ChangeKind.UNCHANGED,
         "Terraform": ChangeKind.NEW,
     }
+
+
+def _achievement_changes(changes: list[Change]) -> list[Change]:
+    return [c for c in changes if c.section == "achievements"]
+
+
+def test_a_copy_is_never_matched_against_linkedin(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft())
+    job = profile.experiences[0]
+    original = job.achievements[0]
+    profile = duplicate_achievement(profile, job.id, original.id)
+
+    assert [c for c in compute_diff(profile, _draft()) if c.kind is not ChangeKind.UNCHANGED] == []
+    changed = _achievement_changes(compute_diff(profile, _draft("Cut SAST findings by 85%.")))
+    assert [c.target_id for c in changed] == [original.id]
+
+
+def test_deleting_the_original_and_keeping_the_copy_brings_nothing_back(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft())
+    job = profile.experiences[0]
+    original = job.achievements[0]
+    profile = duplicate_achievement(profile, job.id, original.id)
+    profile = remove_achievement(profile, job.id, original.id)
+    copy = profile.experiences[0].achievements[0]
+
+    assert _achievement_changes(compute_diff(profile, _draft())) == []
+    after = _sync(profile, _draft())
+    assert [(a.id, a.text, a.imported_value) for a in after.experiences[0].achievements] == [
+        (copy.id, "Cut SAST findings by 80%.", None)
+    ]
+
+
+def test_a_deleted_linkedin_achievement_is_not_proposed_again(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft())
+    job = profile.experiences[0]
+    profile = remove_achievement(profile, job.id, job.achievements[0].id)
+
+    assert _achievement_changes(compute_diff(profile, _draft())) == []
+
+
+def test_one_linkedin_rewrote_beyond_recognition_comes_back_as_new(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft())
+    job = profile.experiences[0]
+    profile = remove_achievement(profile, job.id, job.achievements[0].id)
+
+    changed = _achievement_changes(compute_diff(profile, _draft("Led the migration of 40 services to Kubernetes.")))
+
+    assert [c.kind for c in changed] == [ChangeKind.NEW]
+
+
+def test_an_achievement_of_yours_is_never_proposed_for_change(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft("Rotated every pipeline secret."))
+    job = profile.experiences[0]
+    profile = add_achievement(profile, job.id, "Cut SAST findings by 80%.")
+    yours = profile.experiences[0].achievements[-1]
+
+    changed = _achievement_changes(compute_diff(profile, _draft("Cut SAST findings by 80%.")))
+    assert yours.id not in {c.target_id for c in changed}
+    assert ChangeKind.NEW in {c.kind for c in changed}
