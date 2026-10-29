@@ -165,7 +165,7 @@ jobs:
           for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
           exit 1
       # The launcher serves everything on one port in this mode, hence the same port twice.
-      - name: Smoke test the local-only protection
+      - name: Smoke test the local-only protection (Linux and macOS)
         if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
@@ -178,7 +178,7 @@ jobs:
           cat second.out
           test "$rc" -eq 0
           grep -q 'already running' second.out
-      - name: Launcher tests on this system
+      - name: Launcher tests on this system (Linux and macOS)
         if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: uv run --frozen pytest tests/test_launcher_console.py tests/test_launcher_prerequisites.py tests/test_launcher_app.py tests/test_launcher_main.py
@@ -193,12 +193,14 @@ jobs:
           grep -q 'CV Generator stopped.' launcher.out
           for _ in $(seq 10); do (exec 3<>/dev/tcp/127.0.0.1/3000) 2>/dev/null || break; sleep 1; done
           ! (exec 3<>/dev/tcp/127.0.0.1/3000) 2>/dev/null
-      # The same checks as the steps above, in one step: on the Windows runner the launcher
-      # never outlived the step that started it. Twice it was gone within seconds of that
-      # step's end, once mid-install, although it lived on while the step did. The launcher
-      # gets a console of its own, as with a double-click. Windows has no SIGTERM to send, so
-      # at the end the whole tree goes down by force; then nothing may be left listening,
-      # which would mean the tree was not the whole story.
+      # The same checks as the steps above, in one step: in both runs that started it in a
+      # step of its own, the Windows launcher was gone within seconds of that step's end,
+      # once halfway through installing Pango, although it lived on while the step did. Why
+      # is not known. The launcher gets a console of its own to match a double-click; that
+      # alone did not keep it alive. Windows has no SIGTERM to send, so at the end the whole
+      # tree goes down by force; then nothing may be left listening, which would mean the
+      # tree was not the whole story. Each phase prints a plain header rather than a log
+      # group, so a failing phase's output is never hidden in a collapsed group.
       - name: Start, check and stop the launcher (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -211,7 +213,7 @@ jobs:
             -RedirectStandardError (Join-Path $dir 'launcher.err') `
             -PassThru
 
-          Write-Host '::group::Wait for the app'
+          Write-Host '== Wait for the app'
           $running = $false
           for ($i = 1; $i -le 300; $i++) {
             if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet -ErrorAction SilentlyContinue) {
@@ -222,28 +224,24 @@ jobs:
             if ($i % 12 -eq 0) { Write-Host "Still waiting for the app ($($i / 12) min)..." }
             Start-Sleep -Seconds 5
           }
-          Write-Host '::endgroup::'
           if (-not $running) { throw 'The launcher exited, or the app did not start within 25 minutes.' }
 
-          Write-Host '::group::Smoke test the local-only protection'
+          Write-Host '== Smoke test the local-only protection'
           uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
           if ($LASTEXITCODE -ne 0) { throw 'The smoke test failed.' }
-          Write-Host '::endgroup::'
 
-          Write-Host '::group::A second start finds the running app'
+          Write-Host '== A second start finds the running app'
           cmd /c start.bat --no-browser > second.out 2>&1
           $rc = $LASTEXITCODE
           Get-Content second.out
           if ($rc -ne 0) { throw "The second start exited with $rc." }
           if (-not (Select-String -Path second.out -Pattern 'already running' -Quiet)) { throw 'The second start did not find the running app.' }
-          Write-Host '::endgroup::'
 
-          Write-Host '::group::Launcher tests on this system'
+          Write-Host '== Launcher tests on this system'
           uv run --frozen pytest tests/test_launcher_console.py tests/test_launcher_prerequisites.py tests/test_launcher_app.py tests/test_launcher_main.py
           if ($LASTEXITCODE -ne 0) { throw 'The launcher tests failed.' }
-          Write-Host '::endgroup::'
 
-          Write-Host '::group::Stop the launcher'
+          Write-Host '== Stop the launcher'
           taskkill /T /F /PID $launcher.Id
           if ($LASTEXITCODE -ne 0) { throw "taskkill exited with $LASTEXITCODE." }
           $deadline = (Get-Date).AddSeconds(30)
@@ -253,7 +251,6 @@ jobs:
             Start-Sleep -Seconds 1
           } while ((Get-Date) -lt $deadline)
           if ($listening) { throw 'Something still listens on port 3000.' }
-          Write-Host '::endgroup::'
       - name: Show the launcher logs
         if: failure()
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
