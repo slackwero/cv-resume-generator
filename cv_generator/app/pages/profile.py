@@ -16,7 +16,8 @@ out with 'PENDING' printed inside.
 import reflex as rx
 
 from cv_generator.app.components.header import data_cell, data_group, legend_strip, page
-from cv_generator.app.states.profile_state import ProfileState
+from cv_generator.app.components.work_experience import work_experience
+from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
 from cv_generator.app.styles import (
     AMBER,
     AMBER_INACTIVE,
@@ -461,7 +462,8 @@ def _without_profile() -> rx.Component:
     )
 
 
-def _form() -> rx.Component:
+def _contact() -> rx.Component:
+    """The personal details. Unlike the other subsections, they save together with the button."""
     return rx.el.div(
         _required(),
         _optional(),
@@ -521,9 +523,77 @@ def _form() -> rx.Component:
             ),
             rx.fragment(),
         ),
-        _photo(),
-        _skills(),
         style={"display": "flex", "flex_direction": "column", "gap": "1.5rem", "width": "100%"},
+    )
+
+
+def _section_item(name: str, label: str) -> rx.Component:
+    """An entry of the side menu. The open one is marked like the wizard's current step:
+    an amber rule on the left and an etched background, never the solid plate."""
+    current = ProfileState.section == name
+    return rx.el.button(
+        label,
+        type="button",
+        on_click=ProfileState.show_section(name),
+        aria_current=rx.cond(current, "true", ""),
+        style={
+            **style_legend(),
+            **touch_target(),
+            "color": rx.cond(current, AMBER, TEXT_MUTED),
+            "text_align": "left",
+            "white_space": "nowrap",
+            "padding": "0.625rem 0.75rem",
+            "border_radius": "0",
+            "border": "1px solid transparent",
+            "border_left": rx.cond(current, f"2px solid {AMBER}", "2px solid transparent"),
+            "background": rx.cond(current, GLASS_ETCHED, "transparent"),
+            "cursor": "pointer",
+            # The left rule stays amber on the open one, or hovering it would erase the mark.
+            "_hover": {
+                "color": AMBER,
+                "border_color": RULE_LINE,
+                "border_left_color": rx.cond(current, AMBER, RULE_LINE),
+            },
+        },
+    )
+
+
+def _side_menu() -> rx.Component:
+    """The four subsections. On a narrow window the entries wrap above the content."""
+    return rx.el.nav(
+        *[_section_item(name, label) for name, label in PROFILE_SECTIONS.items()],
+        aria_label="Profile sections",
+        style={
+            "display": "flex",
+            "flex_direction": ["row", "row", "row", "column"],
+            "flex_wrap": "wrap",
+            "gap": "0.125rem",
+            "flex": "0 0 auto",
+            "width": ["100%", "100%", "100%", "11rem"],
+            "align_self": "flex-start",
+        },
+    )
+
+
+def _form() -> rx.Component:
+    return rx.el.div(
+        _side_menu(),
+        rx.el.div(
+            rx.match(
+                ProfileState.section,
+                ("photo", _photo()),
+                ("skills", _skills()),
+                ("experience", work_experience()),
+                _contact(),
+            ),
+            style={"flex": "1 1 auto", "min_width": "0"},
+        ),
+        style={
+            "display": "flex",
+            "flex_direction": ["column", "column", "column", "row"],
+            "gap": ["1rem", "1rem", "1rem", "1.5rem"],
+            "width": "100%",
+        },
     )
 
 
@@ -588,11 +658,12 @@ def _direction(status: str, title: str, explanation: str) -> rx.Component:
 
 
 def profile_page() -> rx.Component:
-    """Editing of the master profile's personal details and skills."""
+    """Editing of the master profile, in four subsections: contact, photo, skills and the
+    achievements of each job."""
     return page(
         "My profile",
-        "Your contact details, your photo and your skills. Experiences and achievements come in and "
-        "are updated from the LinkedIn sync.",
+        "Your contact details, your photo, your skills and the achievements of each job. "
+        "The jobs themselves come in and are updated from the LinkedIn sync.",
         rx.cond(ProfileState.has_profile, _form(), _without_profile()),
         strip=rx.cond(ProfileState.has_profile, legend_strip(_strip()), rx.fragment()),
         data=data_group(

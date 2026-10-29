@@ -7,6 +7,7 @@ import reflex as rx
 
 from cv_generator.app.local_only import LocalOnlyMiddleware
 from cv_generator.app.pages import home, profile, sync, wizard
+from cv_generator.app.states.experience_state import ExperienceState
 
 # The whole interface is in English: this declares it, so a screen reader reads the
 # labels with the right pronunciation.
@@ -68,7 +69,7 @@ app.add_page(
     profile.profile_page,
     route="/profile",
     title="My profile",
-    on_load=profile.ProfileState.start,
+    on_load=[profile.ProfileState.start, ExperienceState.start],
 )
 app.add_page(
     sync.sync_page,

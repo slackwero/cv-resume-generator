@@ -2,8 +2,8 @@
 
 It covers the personal details: the five fields the CV cannot print empty plus the
 optional contact fields and the photo. Also the skills, because the LinkedIn PDF only
-brings the top three. Experiences and achievements are not edited here; they come in and
-are updated through the sync.
+brings the top three, and which subsection of the screen is open. The achievements of
+each job live in `ExperienceState`, which the Work experience subsection uses.
 """
 
 import asyncio
@@ -38,6 +38,22 @@ EDITABLE_FIELDS = (
 )
 
 
+# The subsections of the screen, in the order of the side menu. `/profile?section=skills`
+# opens one directly.
+PROFILE_SECTIONS: dict[str, str] = {
+    "contact": "Contact",
+    "photo": "Photo",
+    "skills": "Skills",
+    "experience": "Work experience",
+}
+
+
+def requested_section(value: str) -> str:
+    """The subsection to open. The value comes from the address bar: anything that is not
+    exactly a known section opens Contact."""
+    return value if value in PROFILE_SECTIONS else "contact"
+
+
 def _without_placeholder(value: str | None) -> str:
     """A pending field is shown empty, not with the word 'PENDING' inside.
 
@@ -50,9 +66,8 @@ def _without_placeholder(value: str | None) -> str:
 class ProfileState(rx.State):
     """Reads and writes the personal details of the master profile."""
 
-    _profile: MasterProfile | None = None
-
     has_profile: bool = False
+    section: str = "contact"
     saving: bool = False
     error_message: str = ""
     saved: bool = False
@@ -82,11 +97,11 @@ class ProfileState(rx.State):
     @rx.event
     def start(self) -> None:
         """Loads the profile from disk and fills the form with the personal details."""
+        self.section = requested_section(self.router.page.params.get("section", ""))
         self.error_message = ""
         self.saved = False
 
         profile = load_profile(DATA_DIR)
-        self._profile = profile
         self.has_profile = profile is not None
         if profile is None:
             return
@@ -106,6 +121,10 @@ class ProfileState(rx.State):
         self.photo_error = ""
         self.skills_error = ""
         self.skills = _skill_rows(profile)
+
+    @rx.event
+    def show_section(self, name: str) -> None:
+        self.section = requested_section(name)
 
     # ------------------------------------------------------------------ fields
 
@@ -149,8 +168,13 @@ class ProfileState(rx.State):
 
     @rx.event
     async def save(self) -> AsyncGenerator[None, None]:
-        """Writes the personal details without touching the rest of the profile."""
-        if self.saving or self._profile is None or not self.can_save:
+        """Writes the personal details without touching the rest of the profile.
+
+        It starts from the profile on disk, like the skills: the achievements save on
+        their own from this same screen, and the profile loaded when it opened would
+        write their old text back.
+        """
+        if self.saving or not self.can_save:
             return
 
         self.saving = True
@@ -159,7 +183,10 @@ class ProfileState(rx.State):
         yield
 
         try:
-            updated = self._profile.model_copy(deep=True)
+            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
+            if on_disk is None:
+                raise ValueError("There is no profile yet. Sync with LinkedIn first.")
+            updated = on_disk.model_copy(deep=True)
             updated.personal = PersonalInfo(
                 first_name=self.first_name.strip(),
                 last_name=self.last_name.strip(),
@@ -170,7 +197,7 @@ class ProfileState(rx.State):
                 country=self.country.strip() or None,
                 address=self.address.strip() or None,
                 birth_date=self._date_or_none(),
-                photo=self._profile.personal.photo,
+                photo=on_disk.personal.photo,
             )
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
@@ -178,7 +205,6 @@ class ProfileState(rx.State):
             self.saving = False
             return
 
-        self._profile = updated
         self.saved = True
         self.saving = False
 
@@ -200,7 +226,6 @@ class ProfileState(rx.State):
             self.photo_error = str(error)
             return
 
-        self._profile = updated
         self.photo = photo or ""
 
     @rx.event
@@ -259,7 +284,6 @@ class ProfileState(rx.State):
             self.skills_error = str(error)
             return
 
-        self._profile = updated
         self.skills = _skill_rows(updated)
 
     @rx.event
