@@ -159,17 +159,23 @@ def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECON
 
     group = process.pid  # process_group=0 makes the child the leader of its own group
     process.poll()  # reap a leader that already exited, so the signals below have a live target
-    # EPERM is what macOS answers for a group with nothing but zombies left: nothing to stop.
-    with contextlib.suppress(ProcessLookupError, PermissionError):
-        os.killpg(group, signal.SIGINT)
-        deadline = time.monotonic() + grace
-        while _group_alive(process, group):
-            if time.monotonic() >= deadline:
-                os.killpg(group, signal.SIGKILL)
-                _wait_for_group(process, group, _KILL_SETTLE_SECONDS)
-                break
-            time.sleep(0.05)
+    _signal_group(group, signal.SIGINT)
+    deadline = time.monotonic() + grace
+    while _group_alive(process, group):
+        if time.monotonic() >= deadline:
+            _signal_group(group, signal.SIGKILL)
+            _wait_for_group(process, group, _KILL_SETTLE_SECONDS)
+            break
+        time.sleep(0.05)
     process.wait()
+
+
+def _signal_group(group: int, sig: signal.Signals) -> None:
+    """Sends `sig` to the group. A group that is gone, or that macOS refuses (EPERM:
+    only zombies or exiting processes left), has nothing to receive it; the caller's
+    wait decides when the group is really gone."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(group, sig)
 
 
 def _wait_for_group(process: "subprocess.Popen[bytes]", group: int, seconds: float) -> None:
@@ -187,6 +193,7 @@ def _group_alive(process: "subprocess.Popen[bytes]", group: int) -> bool:
     """True while any process of the group exists.
 
     The leader is reaped first: a zombie leader still counts as a member of the group.
+    Only "no such group" counts as gone.
     """
     process.poll()
     try:
@@ -194,9 +201,11 @@ def _group_alive(process: "subprocess.Popen[bytes]", group: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        # macOS answers EPERM for a group whose only member is a zombie that is about
-        # to be reaped. Once the leader is reaped, nothing of ours is left.
-        return process.returncode is None
+        # On macOS EPERM means the group still has members, only zombies or processes in
+        # the middle of exiting (leader or not). Their sockets may not be closed yet, so it
+        # is not "gone": keep waiting. Only ProcessLookupError ends it. Every wait is
+        # bounded, and init reaps the orphans, after which the group disappears.
+        return True
     return True
 
 
