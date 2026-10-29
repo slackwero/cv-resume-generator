@@ -8,7 +8,11 @@ things could still reach it from a browser on this very machine:
   `Origin` header, and one that is not the app's own page is refused. Cross-site GETs
   (images, iframes, scripts, navigations, and `fetch()` in no-cors mode) carry no
   `Origin`, but modern browsers mark every one of them with `Sec-Fetch-Site:
-  cross-site`, and that is what refuses them.
+  cross-site`, and that is what refuses them. The one exception is a top-level
+  navigation (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`, GET or HEAD),
+  which is what clicking a link to the app on another website does: it replaces the
+  page, so the other site cannot read the response, and GETs never change state.
+  Iframes still carry `Sec-Fetch-Dest: iframe` and are refused.
 - DNS rebinding. A hostile domain is pointed at 127.0.0.1 after the page loads, so the
   browser treats the backend as the same origin. Its requests still carry the hostile
   domain in the `Host` header, which is what gives it away; the `Origin` rule also
@@ -85,6 +89,19 @@ def is_allowed_fetch_site(fetch_site: str | None) -> bool:
     return (fetch_site or "").lower() != "cross-site"
 
 
+def is_top_level_navigation(method: str | None, fetch_mode: str | None, fetch_dest: str | None) -> bool:
+    """Whether a request is a browser navigating a whole tab to the app, as a link click does.
+
+    Only GET and HEAD count, and `Sec-Fetch-Dest: document` keeps iframes (`iframe`,
+    `frame`, `embed`, `object`) out. Websocket scopes have no method: they never count.
+    """
+    return (
+        (method or "").upper() in ("GET", "HEAD")
+        and (fetch_mode or "").lower() == "navigate"
+        and (fetch_dest or "").lower() == "document"
+    )
+
+
 def configured_ports() -> frozenset[int]:
     """The frontend and backend ports of the running app."""
     config = get_config()
@@ -115,5 +132,8 @@ class LocalOnlyMiddleware:
         origin = headers.get("origin")
         if origin is None:
             # Without an Origin (a plain cross-site GET), Fetch Metadata tells who is calling.
-            return is_allowed_fetch_site(headers.get("sec-fetch-site"))
+            fetch_site = headers.get("sec-fetch-site")
+            return is_allowed_fetch_site(fetch_site) or is_top_level_navigation(
+                scope.get("method"), headers.get("sec-fetch-mode"), headers.get("sec-fetch-dest")
+            )
         return is_allowed_origin(origin, self._ports())

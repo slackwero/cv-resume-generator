@@ -9,7 +9,13 @@ from starlette.testclient import TestClient
 from starlette.types import Lifespan
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from cv_generator.app.local_only import LocalOnlyMiddleware, is_allowed_fetch_site, is_allowed_origin, is_local_host
+from cv_generator.app.local_only import (
+    LocalOnlyMiddleware,
+    is_allowed_fetch_site,
+    is_allowed_origin,
+    is_local_host,
+    is_top_level_navigation,
+)
 
 
 @pytest.mark.parametrize("host", ["localhost", "localhost:8000", "127.0.0.1:3000", "LocalHost:8000"])
@@ -160,3 +166,32 @@ def test_the_whole_backend_goes_through_the_local_only_middleware() -> None:
     from cv_generator.app.app import app
 
     assert app.api_transformer is LocalOnlyMiddleware
+
+
+@pytest.mark.parametrize(
+    ("method", "mode", "dest", "expected"),
+    [
+        ("GET", "navigate", "document", True),
+        ("HEAD", "navigate", "document", True),
+        ("POST", "navigate", "document", False),
+        ("GET", "navigate", "iframe", False),
+        ("GET", "no-cors", "image", False),
+        ("GET", None, None, False),
+        (None, "navigate", "document", False),
+    ],
+)
+def test_only_top_level_get_navigations_count(
+    method: str | None, mode: str | None, dest: str | None, expected: bool
+) -> None:
+    assert is_top_level_navigation(method, mode, dest) is expected
+
+
+def test_a_link_from_another_site_opens_the_app(client: TestClient) -> None:
+    # Headers a browser sends when a person clicks a localhost link on github.com.
+    headers = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+    assert client.get("/", headers=headers).status_code == 200
+
+
+def test_another_site_still_cannot_frame_the_app(client: TestClient) -> None:
+    headers = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "iframe"}
+    assert client.get("/", headers=headers).status_code == 403
