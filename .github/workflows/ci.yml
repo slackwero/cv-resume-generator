@@ -148,11 +148,63 @@ jobs:
             -RedirectStandardError (Join-Path $dir 'launcher.err') `
             -PassThru -NoNewWindow
           Set-Content -Path (Join-Path $dir 'launcher.pid') -Value $p.Id
+      # The start step returns at once, but uv may not exist until the start file has installed
+      # it, and the smoke test's `uv run` must not sync the .venv the launcher is still
+      # building. So wait for the launcher's own "running" line, and fail early, with its
+      # logs, if the process dies first. The first start on a clean machine downloads Python,
+      # the packages, bun and the frontend dependencies, hence the long limit. A zombie counts
+      # as dead: a container's PID 1 does not reap children.
+      - name: Wait for the app (Linux and macOS)
+        if: runner.os != 'Windows'
+        working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
+        run: |
+          pid=$(cat launcher.pid)
+          alive() {
+            kill -0 "$pid" 2>/dev/null || return 1
+            ! grep -q '^[0-9]* ([^)]*) Z' "/proc/$pid/stat" 2>/dev/null
+          }
+          for i in $(seq 300); do
+            if grep -q 'CV Generator is running at' launcher.out; then exit 0; fi
+            if ! alive; then
+              echo "The launcher exited before the app was running."
+              for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
+              exit 1
+            fi
+            if [ $((i % 12)) -eq 0 ]; then echo "Still waiting for the app ($((i / 12)) min)..."; fi
+            sleep 5
+          done
+          echo "The app did not start within 25 minutes."
+          for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
+          exit 1
+      - name: Wait for the app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
+        run: |
+          $id = [int](Get-Content launcher.pid)
+          for ($i = 1; $i -le 300; $i++) {
+            if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet) { exit 0 }
+            if (-not (Get-Process -Id $id -ErrorAction SilentlyContinue)) {
+              Write-Host 'The launcher exited before the app was running.'
+              foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
+                Write-Host "== $f"
+                if (Test-Path $f) { Get-Content $f }
+              }
+              exit 1
+            }
+            if ($i % 12 -eq 0) { Write-Host "Still waiting for the app ($($i / 12) min)..." }
+            Start-Sleep -Seconds 5
+          }
+          Write-Host 'The app did not start within 25 minutes.'
+          foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
+            Write-Host "== $f"
+            if (Test-Path $f) { Get-Content $f }
+          }
+          exit 1
       # The launcher serves everything on one port in this mode, hence the same port twice.
-      # The first start installs the frontend and, on a clean machine, the native libraries.
       - name: Smoke test the local-only protection
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
-        run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 900
+        run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
       - name: A second start finds the running app (Linux and macOS)
         if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
@@ -238,8 +290,34 @@ jobs:
         run: |
           ./start.sh --yes --no-browser > launcher.out 2>&1 < /dev/null &
           echo $! > launcher.pid
+      # The start step returns at once, but uv may not exist until the start file has installed
+      # it, and the smoke test's `uv run` must not sync the .venv the launcher is still
+      # building. So wait for the launcher's own "running" line, and fail early, with its
+      # logs, if the process dies first. The first start on a clean machine downloads Python,
+      # the packages, bun and the frontend dependencies, hence the long limit. A zombie counts
+      # as dead: a container's PID 1 does not reap children.
+      - name: Wait for the app
+        run: |
+          pid=$(cat launcher.pid)
+          alive() {
+            kill -0 "$pid" 2>/dev/null || return 1
+            ! grep -q '^[0-9]* ([^)]*) Z' "/proc/$pid/stat" 2>/dev/null
+          }
+          for i in $(seq 300); do
+            if grep -q 'CV Generator is running at' launcher.out; then exit 0; fi
+            if ! alive; then
+              echo "The launcher exited before the app was running."
+              for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
+              exit 1
+            fi
+            if [ $((i % 12)) -eq 0 ]; then echo "Still waiting for the app ($((i / 12)) min)..."; fi
+            sleep 5
+          done
+          echo "The app did not start within 25 minutes."
+          for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
+          exit 1
       - name: Smoke test the local-only protection
-        run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 900
+        run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
       - name: A second start finds the running app
         run: |
           rc=0
