@@ -15,7 +15,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from types import FrameType
-from typing import TextIO
+from typing import NoReturn, TextIO
 
 from launcher import app, console, prerequisites
 
@@ -82,28 +82,13 @@ def _install_missing(args: argparse.Namespace, log: TextIO, log_path: Path) -> N
 
 
 def _run(args: argparse.Namespace, folder: Path, started: list[subprocess.Popen[bytes]]) -> int:
-    """Opens a fresh log for this run and hands over to `_start`."""
-    try:
-        log = console.open_log(folder)
-    except OSError as error:
-        raise _Failure(
-            f"CV Generator cannot write in its own folder ({folder}). "
-            "Move the folder somewhere you can write to, for example your Documents folder, and start it again."
-        ) from error
-    with log:
-        return _start(args, folder, log, started)
-
-
-def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subprocess.Popen[bytes]]) -> int:
-    log_path = folder / console.LOG_NAME
+    """Returns 0 when the app is already running; otherwise opens a fresh log and starts it."""
     port = args.port
     url = app.app_url(port)
     console.say("Starting CV Generator...")
 
-    uv = os.environ.get("UV") or shutil.which("uv")
-    if not uv:
-        raise _Failure("uv was not found. Start CV Generator with start.command, start.sh or start.bat.")
-
+    # The port comes before the log: an app that is already running still writes to
+    # start.log, and opening the log for a new run would wipe what it wrote.
     state = app.port_state(port)
     if state is app.PortState.OURS:
         console.say(f"CV Generator is already running at {url}.")
@@ -114,6 +99,27 @@ def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[su
         raise _Failure(
             f"Another program is using port {port}, so CV Generator cannot start. Close that program and try again."
         )
+
+    try:
+        log = console.open_log(folder)
+    except OSError as error:
+        raise _Failure(
+            f"CV Generator cannot write in its own folder ({folder}). "
+            "Move the folder somewhere you can write to, for example your Documents folder, and start it again."
+        ) from error
+    with log:
+        _start(args, folder, log, started)
+
+
+def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subprocess.Popen[bytes]]) -> NoReturn:
+    """Prepares and starts the app, then waits for it; it only ends by raising."""
+    log_path = folder / console.LOG_NAME
+    port = args.port
+    url = app.app_url(port)
+
+    uv = os.environ.get("UV") or shutil.which("uv")
+    if not uv:
+        raise _Failure("uv was not found. Start CV Generator with start.command, start.sh or start.bat.")
 
     problem = prerequisites.folder_problem(folder)
     if problem:

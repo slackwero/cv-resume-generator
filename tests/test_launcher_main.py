@@ -71,6 +71,23 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     return seen
 
 
+def test_a_second_start_leaves_the_running_apps_log_alone(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    log = tmp_path / "start.log"
+    log.write_text("what the running app wrote\n", encoding="utf-8")
+    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OURS)
+    assert main(["--no-browser"], folder=tmp_path) == 0
+    assert log.read_text(encoding="utf-8") == "what the running app wrote\n"
+
+
+def test_a_new_start_replaces_the_previous_log(calls: Calls, tmp_path: Path) -> None:
+    log = tmp_path / "start.log"
+    log.write_text("the previous run\n", encoding="utf-8")
+    main(["--no-browser"], folder=tmp_path)
+    assert "the previous run" not in log.read_text(encoding="utf-8")
+
+
 def test_an_app_already_running_only_opens_the_browser(
     calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
