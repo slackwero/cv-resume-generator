@@ -1,0 +1,193 @@
+"""Starting the app, knowing when it is up, and stopping all of it.
+
+The launcher runs Reflex in production mode on a single port: the compiled frontend and
+the backend answer on the same address, so there is one port to check and one URL to open.
+Everything here talks to `127.0.0.1` only.
+"""
+
+import contextlib
+import http.client
+import os
+import signal
+import subprocess
+import sys
+import time
+import webbrowser
+from collections.abc import Callable, Sequence
+from enum import Enum
+from pathlib import Path
+from typing import TextIO
+
+DEFAULT_PORT = 3000
+READY_TIMEOUT_SECONDS = 900  # the first start compiles the frontend, which takes minutes
+STOP_GRACE_SECONDS = 15.0
+# In production mode `GET /` serves this title. The dev server does not, so the title only
+# marks "ours" for the app the launcher starts itself.
+APP_TITLE = "<title>CV Generator</title>"
+
+_HTTP_TIMEOUT_SECONDS = 5
+_POLL_SECONDS = 1.0
+_WAIT_REPORT_SECONDS = 60
+_IS_WINDOWS = sys.platform == "win32"
+
+
+class PortState(Enum):
+    FREE = "free"
+    OURS = "ours"
+    OTHER = "other"
+
+
+def _get(port: int, path: str) -> tuple[int, str]:
+    """Does a GET on 127.0.0.1 and returns the status and the start of the body.
+
+    `HTTPConnection("127.0.0.1", ...)` sends `Host: 127.0.0.1:<port>`, which the app's
+    middleware allows (it refuses any Host other than localhost or 127.0.0.1).
+    """
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=_HTTP_TIMEOUT_SECONDS)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        return response.status, response.read(1_000_000).decode("utf-8", errors="replace")
+    finally:
+        connection.close()
+
+
+def port_state(port: int) -> PortState:
+    """Tells whether `port` is free, held by this app, or held by another program."""
+    try:
+        status, body = _get(port, "/")
+    except ConnectionRefusedError:
+        return PortState.FREE
+    except (OSError, http.client.HTTPException):
+        # Something is listening but does not answer HTTP properly.
+        return PortState.OTHER
+    if status == http.HTTPStatus.OK and APP_TITLE in body:
+        return PortState.OURS
+    return PortState.OTHER
+
+
+def app_url(port: int) -> str:
+    return f"http://localhost:{port}"
+
+
+def app_command(uv: str, port: int) -> list[str]:
+    """The command that starts the app in production mode on one port.
+
+    It goes through `python -m reflex` because `.venv/bin/reflex` has an absolute shebang
+    that breaks when the project folder is moved, and `uv sync` does not repair it.
+    """
+    return [
+        uv,
+        "run",
+        "--frozen",
+        "python",
+        "-m",
+        "reflex",
+        "run",
+        "--env",
+        "prod",
+        "--single-port",
+        "--frontend-port",
+        str(port),
+        "--backend-port",
+        str(port),
+    ]
+
+
+def start_app(command: Sequence[str], folder: Path, log: TextIO) -> "subprocess.Popen[bytes]":
+    """Starts the app with its output in the log, in its own process group.
+
+    The group is what lets `stop_app` reach uv, Reflex, its workers and bun together,
+    and keeps a Ctrl+C in the launcher's console from hitting them separately.
+    """
+    log.write(f"$ {' '.join(command)}\n")
+    log.flush()
+    group: dict[str, object] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if _IS_WINDOWS else {"process_group": 0}
+    )
+    return subprocess.Popen(  # noqa: S603 - the command is built by app_command from constants
+        list(command),
+        cwd=folder,
+        stdin=subprocess.DEVNULL,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        **group,  # type: ignore[arg-type]
+    )
+
+
+def wait_until_ready(
+    port: int,
+    process: "subprocess.Popen[bytes]",
+    *,
+    timeout: float = READY_TIMEOUT_SECONDS,
+    on_wait: Callable[[float], None] | None = None,
+) -> bool:
+    """Polls `/ping` until it answers 200; False if the app exits or time runs out."""
+    started = time.monotonic()
+    next_report = _WAIT_REPORT_SECONDS
+    while True:
+        if process.poll() is not None:
+            return False
+        with contextlib.suppress(OSError, http.client.HTTPException):
+            if _get(port, "/ping")[0] == http.HTTPStatus.OK:
+                return True
+        elapsed = time.monotonic() - started
+        if elapsed >= timeout:
+            return False
+        if on_wait is not None and elapsed >= next_report:
+            on_wait(elapsed)
+            next_report += _WAIT_REPORT_SECONDS
+        time.sleep(min(_POLL_SECONDS, max(timeout - elapsed, 0)))
+
+
+def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECONDS) -> None:
+    """Stops the app and everything it started, then reaps it.
+
+    On POSIX SIGINT goes to the whole group (a plain SIGTERM does not stop Reflex), and
+    SIGKILL follows if something is still alive after `grace` seconds. On Windows the
+    tree is killed outright: the app saves atomically, so a hard stop is safe.
+    """
+    if _IS_WINDOWS:
+        subprocess.run(  # noqa: S603 - fixed command, the pid is an int from our own child
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],  # noqa: S607
+            capture_output=True,
+            check=False,
+        )
+        process.wait()
+        return
+
+    group = process.pid  # process_group=0 makes the child the leader of its own group
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(group, signal.SIGINT)
+        deadline = time.monotonic() + grace
+        while _group_alive(process, group):
+            if time.monotonic() >= deadline:
+                os.killpg(group, signal.SIGKILL)
+                break
+            time.sleep(0.05)
+    process.wait()
+
+
+def _group_alive(process: "subprocess.Popen[bytes]", group: int) -> bool:
+    """True while any process of the group exists.
+
+    The leader is reaped first: a zombie leader still counts as a member of the group.
+    """
+    process.poll()
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # macOS answers EPERM for a group whose only member is a zombie that is about
+        # to be reaped. Once the leader is reaped, nothing of ours is left.
+        return process.returncode is None
+    return True
+
+
+def open_browser(url: str) -> bool:
+    """Opens `url` in the default browser; False when that is not possible."""
+    try:
+        return webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - whatever the platform does, the app still works without it
+        return False
