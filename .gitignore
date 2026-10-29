@@ -38,3 +38,6 @@ docs/superpowers/
 
 # macOS
 .DS_Store
+
+# The launcher's log of the latest run
+start.log
