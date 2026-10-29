@@ -132,6 +132,18 @@ def summary_by_kind(changes: list[Change]) -> dict[ChangeKind, int]:
     return tally
 
 
+def profile_unchanged(expected: MasterProfile | None, on_disk: MasterProfile | None) -> bool:
+    """Whether the profile on disk is still the one the sync screen worked against.
+
+    The kinds of change were worked out against `expected`, and applying or undoing
+    writes a whole profile: over one edited since in another tab, it would write the old
+    one back and lose those edits.
+    """
+    if expected is None or on_disk is None:
+        return expected is on_disk
+    return expected.model_dump() == on_disk.model_dump()
+
+
 def _inventory(profile: MasterProfile) -> dict[str, int]:
     return {
         "experiences": len(profile.experiences),

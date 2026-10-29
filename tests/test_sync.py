@@ -7,12 +7,14 @@ import pytest
 from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.merge import Change, ChangeKind, compute_diff
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
+from cv_generator.services.achievements import edit_achievement
 from cv_generator.services.profile import load_profile, load_sync_status, save_profile
 from cv_generator.services.sync import (
     analyze_file,
     analyze_pdf,
     apply_sync,
     preselection,
+    profile_unchanged,
     summary_by_kind,
 )
 from tests.test_models_personal import REQUIRED
@@ -234,3 +236,48 @@ def test_the_first_sync_backs_up_nothing_because_there_was_no_profile(tmp_path: 
     )
 
     assert result.backup is None
+
+
+# ------------------------------------------------- the profile changed in another tab
+
+
+def _synced_profile() -> MasterProfile:
+    return MasterProfile(
+        personal=REQUIRED,
+        experiences=[
+            Experience(
+                company="Northwind",
+                role="Platform Engineer",
+                start="2020-04",
+                current=True,
+                achievements=[
+                    Achievement(text="Cut SAST findings by 80%.", imported_value="Cut SAST findings by 80%.")
+                ],
+            )
+        ],
+    )
+
+
+def test_a_profile_read_back_from_disk_is_unchanged(tmp_path: Path) -> None:
+    """What apply wrote is compared against what is read back to undo it."""
+    profile = _synced_profile()
+    save_profile(tmp_path, profile)
+
+    assert profile_unchanged(profile, load_profile(tmp_path))
+
+
+def test_an_achievement_edited_on_disk_is_a_change() -> None:
+    profile = _synced_profile()
+    job = profile.experiences[0]
+
+    edited = edit_achievement(profile, job.id, job.achievements[0].id, "Cut SAST findings by 90%.")
+
+    assert not profile_unchanged(profile, edited)
+
+
+def test_no_profile_before_and_none_now_is_unchanged() -> None:
+    assert profile_unchanged(None, None)
+
+
+def test_a_profile_created_in_the_meantime_is_a_change() -> None:
+    assert not profile_unchanged(None, _synced_profile())

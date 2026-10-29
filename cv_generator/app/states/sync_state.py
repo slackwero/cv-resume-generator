@@ -18,6 +18,7 @@ from cv_generator.services.sync import (
     create_initial_profile,
     empty_profile,
     preselection,
+    profile_unchanged,
     summary_by_kind,
 )
 from cv_generator.text import plural
@@ -73,6 +74,9 @@ class SyncState(rx.State):
     """Drives the analyze -> review -> apply cycle."""
 
     _profile: MasterProfile | None = None
+    # What `apply` wrote. Undoing puts the backup over the whole profile, so it is only
+    # safe while the profile on disk is still this one.
+    _applied: MasterProfile | None = None
     _changes: list[Change] = []
     _imported_personal: PartialPersonalInfo = PartialPersonalInfo()
 
@@ -108,7 +112,6 @@ class SyncState(rx.State):
         """Leaves the screen ready for a new sync."""
         self.phase = PHASE_CHOOSE
         self.error_message = ""
-        self.notice = ""
         self.result_summary = ""
         self.visible_changes = []
         self.change_rows = []
@@ -116,14 +119,20 @@ class SyncState(rx.State):
         self.backup_path = ""
         self.undone = False
         self._changes = []
+        self._applied = None
 
-        self._profile = load_profile(DATA_DIR)
-        self.is_first_profile = self._profile is None
-        if self.is_first_profile:
-            self.notice = (
-                "There is no profile yet. This first sync will create it with "
-                "whatever the file brings, and afterwards you can complete what is missing."
-            )
+        self._compare_against(load_profile(DATA_DIR))
+
+    def _compare_against(self, profile: MasterProfile | None) -> None:
+        """Takes the profile the next file is analyzed against."""
+        self._profile = profile
+        self.is_first_profile = profile is None
+        self.notice = (
+            "There is no profile yet. This first sync will create it with "
+            "whatever the file brings, and afterwards you can complete what is missing."
+            if self.is_first_profile
+            else ""
+        )
 
     @rx.event
     async def process_file(self, files: list[rx.UploadFile]) -> AsyncGenerator[None, None]:
@@ -305,6 +314,19 @@ class SyncState(rx.State):
         base = self._profile or create_initial_profile(self._imported_personal)
         accepted_items = {key for key, value in self.accepted_items.items() if value}
         try:
+            # The kinds were worked out against the profile loaded with this screen. Applied
+            # over one edited since in another tab, they would write the old one back, so it
+            # is refused and the next upload is analyzed against what is on disk now.
+            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
+            if not profile_unchanged(self._profile, on_disk):
+                self._compare_against(on_disk)
+                self.phase = PHASE_CHOOSE
+                self.error_message = (
+                    "Your profile changed in another tab after you uploaded the file. "
+                    "Upload it again so the review is against what you have now."
+                )
+                self.applying = False
+                return
             result = await asyncio.to_thread(
                 apply_sync,
                 profile=base,
@@ -319,6 +341,7 @@ class SyncState(rx.State):
             self.applying = False
             return
 
+        self._applied = result.profile
         profile = result.profile
         achievements = sum(len(experience.achievements) for experience in profile.experiences)
         changes = plural(len(accepted_items), "change", "changes")
@@ -347,6 +370,15 @@ class SyncState(rx.State):
         yield
 
         try:
+            # The backup goes over the whole profile: over edits made after this sync, it
+            # would undo those too.
+            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
+            if not profile_unchanged(self._applied, on_disk):
+                self.error_message = (
+                    "Your profile changed after this sync, so undoing it now would also undo those changes."
+                )
+                self.undoing = False
+                return
             profile = await asyncio.to_thread(restore_backup, DATA_DIR, self.backup_path)
         except (FileNotFoundError, ValueError, OSError) as error:
             self.error_message = f"The backup could not be restored: {error}"
