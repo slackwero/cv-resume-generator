@@ -27,6 +27,7 @@ APP_TITLE = "<title>CV Generator</title>"
 
 _HTTP_TIMEOUT_SECONDS = 5
 _KILL_SETTLE_SECONDS = 2.0
+_REAP_SECONDS = 1.0
 _POLL_SECONDS = 1.0
 _WAIT_REPORT_SECONDS = 60
 _IS_WINDOWS = sys.platform == "win32"
@@ -147,16 +148,44 @@ def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECON
     On POSIX SIGINT goes to the whole group (a plain SIGTERM does not stop Reflex), and
     SIGKILL follows if something is still alive after `grace` seconds. On Windows the
     tree is killed outright: the app saves atomically, so a hard stop is safe.
+
+    Every wait is bounded, the last one too. CPython can run a signal handler right after
+    `Popen.poll` (or a timed `wait`) takes its internal lock and before the `try` that
+    releases it; a KeyboardInterrupt there leaves the lock held, and a plain `wait()` would
+    then block the launcher forever. The app is dead by that point, and if this wait gives
+    up, init reaps it once the launcher exits.
     """
     if _IS_WINDOWS:
-        subprocess.run(  # noqa: S603 - fixed command, the pid is an int from our own child
+        _kill_tree(process)
+    else:
+        _stop_group(process, grace)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=_REAP_SECONDS)
+
+
+def _kill_tree(process: "subprocess.Popen[bytes]") -> None:
+    """Kills the app's process tree on Windows.
+
+    When taskkill fails (the leader already exited, so there is no tree to find from it, or
+    taskkill is refused or missing), the leader is killed directly so at least it is gone.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed command, the pid is an int from our own child
             ["taskkill", "/T", "/F", "/PID", str(process.pid)],  # noqa: S607
             capture_output=True,
             check=False,
+            timeout=STOP_GRACE_SECONDS,
         )
-        process.wait()
-        return
+        killed = result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        killed = False
+    if not killed:
+        with contextlib.suppress(OSError):
+            process.kill()
 
+
+def _stop_group(process: "subprocess.Popen[bytes]", grace: float) -> None:
+    """Sends SIGINT to the app's process group, then SIGKILL after `grace` seconds."""
     group = process.pid  # process_group=0 makes the child the leader of its own group
     process.poll()  # reap a leader that already exited, so the signals below have a live target
     _signal_group(group, signal.SIGINT)
@@ -167,7 +196,6 @@ def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECON
             _wait_for_group(process, group, _KILL_SETTLE_SECONDS)
             break
         time.sleep(0.05)
-    process.wait()
 
 
 def _signal_group(group: int, sig: signal.Signals) -> None:

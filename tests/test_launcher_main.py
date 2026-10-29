@@ -1,6 +1,7 @@
 import signal
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import FrameType
 
@@ -8,7 +9,9 @@ import pytest
 
 from launcher import app, console, prerequisites
 from launcher import main as launcher_main
-from launcher.main import main
+from launcher.main import install_stop_signals, main
+
+Handler = Callable[[int, FrameType | None], object]
 
 
 class FakeProcess:
@@ -46,7 +49,6 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     seen = Calls()
     monkeypatch.setenv("UV", "/x/uv")
     monkeypatch.setattr(launcher_main, "install_stop_signals", lambda: None)
-    monkeypatch.setattr(launcher_main, "_ignore_stop_signals", lambda: None)
     monkeypatch.setattr(app, "port_state", lambda port: app.PortState.FREE)
     monkeypatch.setattr(prerequisites, "folder_problem", lambda folder: None)
     monkeypatch.setattr(prerequisites, "required_prerequisites", lambda: [present()])
@@ -295,18 +297,91 @@ def test_no_browser_keeps_the_browser_closed(calls: Calls, tmp_path: Path) -> No
     assert calls.opened == []
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
-def test_the_stop_signals_become_keyboard_interrupts(monkeypatch: pytest.MonkeyPatch) -> None:
-    installed: dict[int, object] = {}
+def installed_handlers(monkeypatch: pytest.MonkeyPatch) -> dict[int, Handler]:
+    """Runs the real `install_stop_signals` with `signal.signal` replaced, so pytest keeps its own handlers."""
+    installed: dict[int, Handler] = {}
     monkeypatch.setattr(signal, "signal", lambda number, handler: installed.update({number: handler}))
-    launcher_main.install_stop_signals()
-    assert installed[signal.SIGINT] is signal.default_int_handler
-    for number in (signal.SIGTERM, signal.SIGHUP):
-        handler = installed[number]
-        assert callable(handler)
-        frame: FrameType | None = None
-        with pytest.raises(KeyboardInterrupt):
-            handler(number, frame)
+    monkeypatch.setattr(launcher_main, "_stopping", False, raising=False)
+    install_stop_signals()
+    return installed
+
+
+def interrupts(handler: Handler, number: int) -> bool:
+    """Calls a signal handler the way Python would; True when it raised KeyboardInterrupt."""
+    frame: FrameType | None = None
+    try:
+        handler(number, frame)
+    except KeyboardInterrupt:
+        return True
+    return False
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_closing_the_window_interrupts_once_and_lets_the_stop_finish(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shell sends SIGHUP to the whole job and uv forwards its copy a moment later.
+
+    Only the first may interrupt: a second KeyboardInterrupt would land inside the cleanup the
+    first one started and leave the app running.
+    """
+    handlers = installed_handlers(monkeypatch)
+    assert set(handlers) == {signal.SIGINT, signal.SIGTERM, signal.SIGHUP}
+    try:
+        handlers[signal.SIGHUP](signal.SIGHUP, None)
+    except KeyboardInterrupt:
+        # uv's copy arrives while the first one is still being handled
+        assert not interrupts(handlers[signal.SIGHUP], signal.SIGHUP)
+    else:
+        pytest.fail("the first stop signal must interrupt the launcher")
+    for number in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT):
+        assert not interrupts(handlers[number], number)
+
+
+def test_on_windows_ctrl_c_and_ctrl_break_interrupt_only_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(launcher_main.sys, "platform", "win32")
+    monkeypatch.setattr(signal, "SIGBREAK", 21, raising=False)
+    handlers = installed_handlers(monkeypatch)
+    assert set(handlers) == {signal.SIGINT, 21}
+    assert interrupts(handlers[21], 21)
+    assert not interrupts(handlers[21], 21)
+    assert not interrupts(handlers[signal.SIGINT], signal.SIGINT)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_a_stop_signal_after_the_run_is_over_is_ignored(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Raised while Python exits, it would only put a traceback on screen."""
+    handlers = installed_handlers(monkeypatch)
+    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OTHER)
+    assert main([], folder=tmp_path) == 1
+    assert not interrupts(handlers[signal.SIGHUP], signal.SIGHUP)
+
+
+def test_a_stop_signal_while_an_error_is_reported_still_stops_the_app(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeProcess()
+    monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
+
+    def broken(url: str) -> bool:
+        raise RuntimeError("no browser")
+
+    real_say = console.say
+
+    def closed_while_reporting(message: str) -> None:
+        if message.startswith("Something went wrong"):
+            raise KeyboardInterrupt  # the window was closed right then
+        real_say(message)
+
+    monkeypatch.setattr(app, "open_browser", broken)
+    monkeypatch.setattr(console, "say", closed_while_reporting)
+    try:
+        code = main([], folder=tmp_path)
+    except KeyboardInterrupt:
+        pytest.fail("the stop signal escaped the launcher, with a traceback")
+    assert code == 0
+    assert calls.stopped == [fake]
+    assert "CV Generator stopped." in capsys.readouterr().out
 
 
 def test_the_module_runs_as_a_program(tmp_path: Path) -> None:

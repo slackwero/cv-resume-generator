@@ -12,7 +12,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import traceback
 from collections.abc import Sequence
 from pathlib import Path
 from types import FrameType
@@ -22,12 +21,27 @@ from launcher import app, console, prerequisites
 
 PROJECT_FOLDER = Path(__file__).resolve().parent.parent
 
+# Set once the launcher is on its way out; from then on a stop signal does nothing.
+_stopping = False
+
 
 class _Failure(Exception):
     """Ends the run with a sentence for the screen; the run returns 1."""
 
 
-def _raise_interrupt(signum: int, frame: FrameType | None) -> None:
+def _on_stop_signal(signum: int, frame: FrameType | None) -> None:
+    """Turns the first stop signal into KeyboardInterrupt and ignores the ones after it.
+
+    Closing a Terminal window delivers SIGHUP twice within a millisecond: the shell sends it
+    to the whole job (uv and the launcher) and uv forwards its own copy. A second
+    KeyboardInterrupt would land inside the cleanup the first one started, where it could
+    abort `stop_app` and leave the app running, or leave `Popen`'s internal lock held and
+    hang the launcher. One request to stop is enough.
+    """
+    global _stopping
+    if _stopping:
+        return
+    _stopping = True
     raise KeyboardInterrupt
 
 
@@ -38,12 +52,9 @@ def install_stop_signals() -> None:
     must pass them on to `stop_app`. SIGINT is set explicitly because a launcher started in
     the background of a non-interactive shell inherits it as ignored.
     """
-    if sys.platform == "win32":
-        signal.signal(signal.SIGBREAK, _raise_interrupt)
-        return
-    signal.signal(signal.SIGTERM, _raise_interrupt)
-    signal.signal(signal.SIGHUP, _raise_interrupt)
-    signal.signal(signal.SIGINT, signal.default_int_handler)
+    names = ("SIGINT", "SIGBREAK") if sys.platform == "win32" else ("SIGINT", "SIGTERM", "SIGHUP")
+    for name in names:
+        signal.signal(getattr(signal, name), _on_stop_signal)
 
 
 def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -70,7 +81,20 @@ def _install_missing(args: argparse.Namespace, log: TextIO, log_path: Path) -> N
             raise _Failure(f"Installing {item.name} did not work. The details are in {log_path}.")
 
 
-def _run(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subprocess.Popen[bytes]]) -> int:
+def _run(args: argparse.Namespace, folder: Path, started: list[subprocess.Popen[bytes]]) -> int:
+    """Opens a fresh log for this run and hands over to `_start`."""
+    try:
+        log = console.open_log(folder)
+    except OSError as error:
+        raise _Failure(
+            f"CV Generator cannot write in its own folder ({folder}). "
+            "Move the folder somewhere you can write to, for example your Documents folder, and start it again."
+        ) from error
+    with log:
+        return _start(args, folder, log, started)
+
+
+def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subprocess.Popen[bytes]]) -> int:
     log_path = folder / console.LOG_NAME
     port = args.port
     url = app.app_url(port)
@@ -135,55 +159,48 @@ def _run(args: argparse.Namespace, folder: Path, log: TextIO, started: list[subp
     raise _Failure(f"CV Generator stopped unexpectedly. The details are in {log_path}.")
 
 
-def _ignore_stop_signals() -> None:
-    """Lets the cleanup finish when the person presses Ctrl+C again.
-
-    The launcher is about to exit, so nothing is restored afterwards.
-    """
-    names = ("SIGBREAK",) if sys.platform == "win32" else ("SIGINT", "SIGTERM", "SIGHUP")
-    for name in names:
-        signal.signal(getattr(signal, name), signal.SIG_IGN)
-
-
 def _stop_started(started: list[subprocess.Popen[bytes]]) -> None:
-    """Stops every app this run started, however it got here."""
-    _ignore_stop_signals()
+    """Stops every app this run started, however it got here.
+
+    When the stop has another cause (the app never became ready, an unexpected error), the
+    first stop signal can still land inside `stop_app`; stopping again finishes the job, and
+    `_on_stop_signal` ignores every signal after that first one.
+    """
     while started:
         process = started[0]
         try:
             app.stop_app(process)
         except KeyboardInterrupt:
-            continue  # a signal slipped in before it was ignored: stop again
+            continue
         started.pop(0)
 
 
 def main(argv: Sequence[str] | None = None, folder: Path = PROJECT_FOLDER) -> int:
     """Runs the launcher; returns the exit code."""
+    global _stopping
     args = _parse(argv)
-    install_stop_signals()
-    try:
-        log = console.open_log(folder)
-    except OSError:
-        console.say(
-            f"CV Generator cannot write in its own folder ({folder}). "
-            "Move the folder somewhere you can write to, for example your Documents folder, and start it again."
-        )
-        return 1
     started: list[subprocess.Popen[bytes]] = []
-    with log:
+    # The KeyboardInterrupt of a stop signal is caught outside the failure handlers because
+    # it can land while one of them runs; wherever it lands, what was started is stopped.
+    try:
         try:
-            return _run(args, folder, log, started)
+            install_stop_signals()
+            return _run(args, folder, started)
         except _Failure as failure:
             console.say(str(failure))
             return 1
-        except KeyboardInterrupt:
-            _stop_started(started)
-            console.say("CV Generator stopped.")
-            return 0
         except Exception:
             _stop_started(started)
-            traceback.print_exc(file=log)
+            console.log_exception(folder)
             console.say(
                 f"Something went wrong while starting CV Generator. The details are in {folder / console.LOG_NAME}."
             )
             return 1
+    except KeyboardInterrupt:
+        _stop_started(started)
+        console.say("CV Generator stopped.")
+        return 0
+    finally:
+        # Nothing is left to stop. A stop signal raised while Python exits would only put a
+        # traceback on the screen.
+        _stopping = True

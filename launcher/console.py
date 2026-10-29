@@ -5,9 +5,11 @@ messages are plain and short. Everything technical (commands, installer output, 
 goes to `start.log` instead, which is what they can send to whoever helps them.
 """
 
+import contextlib
 import os
 import subprocess
 import sys
+import traceback
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -50,6 +52,16 @@ def open_log(folder: Path) -> TextIO:
     log.write(f"{datetime.now().isoformat(timespec='seconds')} {sys.platform} Python {sys.version.split()[0]}\n")
     log.flush()
     return log
+
+
+def log_exception(folder: Path) -> None:
+    """Adds the traceback of the exception being handled to `start.log`, if the folder allows it.
+
+    It appends: by the time an error reaches the launcher's last line of defence, the run's
+    log is already closed, or was never opened because the error came first.
+    """
+    with contextlib.suppress(OSError), (folder / LOG_NAME).open("a", encoding="utf-8") as log:
+        traceback.print_exc(file=log)
 
 
 def run_logged(

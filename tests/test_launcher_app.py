@@ -13,6 +13,7 @@ from typing import TextIO
 
 import pytest
 
+from launcher import app as app_module
 from launcher.app import (
     PortState,
     app_command,
@@ -289,6 +290,62 @@ def test_stop_app_handles_a_leader_that_exited_but_was_not_reaped(tmp_path: Path
         assert process.returncode == 0
     finally:
         _kill_leftovers(process)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Popen takes this lock only in its POSIX waits")
+def test_stop_app_returns_even_when_an_interrupt_left_popens_lock_held(tmp_path: Path, log: TextIO) -> None:
+    """CPython can run a signal handler right after `Popen.poll` (or a timed `wait`) takes its
+    internal lock and before the `try` that releases it. A KeyboardInterrupt there leaves the
+    lock held, and a plain `wait()` would then block the launcher forever."""
+    process = start_app([sys.executable, "-c", "import time; time.sleep(60)"], tmp_path, log)
+    process._waitpid_lock.acquire()  # what the interrupted poll leaves behind
+    stopper = threading.Thread(target=stop_app, args=(process,), kwargs={"grace": 0.5}, daemon=True)
+    try:
+        stopper.start()
+        stopper.join(timeout=15)
+        assert not stopper.is_alive(), "stop_app hung on the held lock"
+    finally:
+        process._waitpid_lock.release()
+        stopper.join(timeout=15)
+        _kill_leftovers(process)
+
+
+class WindowsLeader:
+    """Stands in for the app on Windows: records kill() and never exits by itself."""
+
+    pid = 4321
+
+    def __init__(self) -> None:
+        self.killed = False
+        self.waits: list[float | None] = []
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.waits.append(timeout)
+        if timeout is None:
+            raise AssertionError("an unbounded wait can hang the launcher forever")
+        raise subprocess.TimeoutExpired("app", timeout)
+
+
+def test_on_windows_a_failed_taskkill_still_kills_the_app_and_the_wait_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def failing_taskkill(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 128)
+
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(app_module.subprocess, "run", failing_taskkill)
+    leader = WindowsLeader()
+    stop_app(leader)
+    assert commands == [["taskkill", "/T", "/F", "/PID", "4321"]]
+    assert leader.killed
+    assert leader.waits
+    assert None not in leader.waits
 
 
 def test_open_browser_reports_failure_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
