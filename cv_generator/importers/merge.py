@@ -117,19 +117,26 @@ def _diff_texts[T: Achievement | ProfileText](
 ) -> list[Change]:
     """Compares two lists of free-text items (achievements or profile texts).
 
-    `dismissed` are texts the owner deleted: an incoming item that matches none of the
-    existing ones but is similar to one of those produces no change at all.
+    `dismissed` are texts the owner deleted: an incoming item that is closer to one of
+    those than to its best existing match produces no change at all, and leaves that
+    match free for the next incoming item.
     """
     changes: list[Change] = []
     available = list(existing_items)
 
     for incoming in incoming_items:
         existing = _match(incoming, available)
+        # Checked before the match is taken: a deleted achievement listed first on LinkedIn
+        # would otherwise take over a similar one next to it, and that one would then be
+        # dropped as deleted. Strictly closer, so of two identical bullets the kept one
+        # still matches.
+        matched = _similarity(_reference(incoming), _reference(existing)) if existing else 0.0
+        closest_dismissed = max((_similarity(incoming.text, text) for text in dismissed), default=0.0)
+        if closest_dismissed >= SIMILARITY_THRESHOLD and closest_dismissed > matched:
+            continue
         prefix = f"{section}:{experience_id}" if experience_id else section
 
         if existing is None:
-            if any(_similarity(incoming.text, text) >= SIMILARITY_THRESHOLD for text in dismissed):
-                continue
             changes.append(
                 Change(
                     key=f"{prefix}:new:{incoming.id}",

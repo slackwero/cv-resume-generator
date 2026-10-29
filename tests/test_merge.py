@@ -3,7 +3,12 @@ import pytest
 from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.merge import Change, ChangeKind, apply_changes, compute_diff
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
-from cv_generator.services.achievements import add_achievement, duplicate_achievement, remove_achievement
+from cv_generator.services.achievements import (
+    add_achievement,
+    duplicate_achievement,
+    edit_achievement,
+    remove_achievement,
+)
 from cv_generator.services.skills import remove_skill, rename_skill
 from tests.test_models_personal import REQUIRED
 
@@ -22,6 +27,13 @@ def _draft(achievement_text: str = "Cut SAST findings by 80%.") -> ProfileDraft:
         ],
         skills=[Skill(name="Kubernetes")],
     )
+
+
+def _draft_with(*achievement_texts: str) -> ProfileDraft:
+    """The same job, with these LinkedIn achievements in this order."""
+    draft = _draft()
+    draft.experiences[0].achievements = [Achievement(text=text, imported_value=text) for text in achievement_texts]
+    return draft
 
 
 @pytest.fixture
@@ -259,6 +271,9 @@ def test_a_copy_is_never_matched_against_linkedin(empty_profile: MasterProfile) 
     profile = duplicate_achievement(profile, job.id, original.id)
 
     assert [c for c in compute_diff(profile, _draft()) if c.kind is not ChangeKind.UNCHANGED] == []
+    # Worded exactly as LinkedIn has it now: by text alone, the copy would be the closest match.
+    copy = profile.experiences[0].achievements[1]
+    profile = edit_achievement(profile, job.id, copy.id, "Cut SAST findings by 85%.")
     changed = _achievement_changes(compute_diff(profile, _draft("Cut SAST findings by 85%.")))
     assert [c.target_id for c in changed] == [original.id]
 
@@ -294,6 +309,42 @@ def test_one_linkedin_rewrote_beyond_recognition_comes_back_as_new(empty_profile
     changed = _achievement_changes(compute_diff(profile, _draft("Led the migration of 40 services to Kubernetes.")))
 
     assert [c.kind for c in changed] == [ChangeKind.NEW]
+
+
+SAST = "Cut SAST findings by 80%."
+DAST = "Cut DAST findings by 80%."
+
+
+def test_a_deleted_achievement_does_not_take_over_a_similar_one(empty_profile: MasterProfile) -> None:
+    """With the deleted one first on LinkedIn, it matched the similar one left and replaced its text."""
+    profile = _sync(empty_profile, _draft_with(SAST, DAST))
+    job = profile.experiences[0]
+    sast, dast = job.achievements
+    profile = remove_achievement(profile, job.id, sast.id)
+
+    changed = _achievement_changes(compute_diff(profile, _draft_with(SAST, DAST)))
+    assert [c for c in changed if c.kind is not ChangeKind.UNCHANGED] == []
+    after = _sync(profile, _draft_with(SAST, DAST))
+    assert [(a.id, a.text) for a in after.experiences[0].achievements] == [(dast.id, DAST)]
+
+
+def test_a_slightly_changed_deleted_achievement_stays_deleted(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft(SAST))
+    job = profile.experiences[0]
+    profile = remove_achievement(profile, job.id, job.achievements[0].id)
+
+    assert _achievement_changes(compute_diff(profile, _draft("Cut SAST findings by 85%."))) == []
+
+
+def test_of_two_identical_bullets_the_kept_one_still_matches(empty_profile: MasterProfile) -> None:
+    profile = _sync(empty_profile, _draft_with(SAST, SAST))
+    job = profile.experiences[0]
+    deleted, kept = job.achievements
+    profile = remove_achievement(profile, job.id, deleted.id)
+
+    for draft in (_draft_with(SAST), _draft_with(SAST, SAST)):
+        changed = _achievement_changes(compute_diff(profile, draft))
+        assert [(c.kind, c.target_id) for c in changed] == [(ChangeKind.UNCHANGED, kept.id)]
 
 
 def test_an_achievement_of_yours_is_never_proposed_for_change(empty_profile: MasterProfile) -> None:
