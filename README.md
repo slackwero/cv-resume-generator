@@ -119,8 +119,8 @@ If you can try one of these, the checklist is in [docs/manual-testing.md](docs/m
    (*More → Save to PDF*) works right away but is less complete. Review the proposed
    changes and apply them: this creates your master profile.
 2. **My profile** — complete what LinkedIn does not provide (the phone, always), add the
-   skills the PDF left out, optionally upload a photo, and edit, duplicate, add or reorder
-   the achievements of each job. What you write there is offered to every later CV.
+   skills the PDF left out, optionally upload a photo, and edit, duplicate, add, delete or
+   reorder the achievements of each job. What you write there is offered to every later CV.
 3. **New CV** — a six-step wizard: template, application, presentation, experience, rest
    of the profile, and sections. Preview the paginated PDF, then generate it.
 

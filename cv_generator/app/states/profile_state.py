@@ -2,8 +2,9 @@
 
 It covers the personal details: the five fields the CV cannot print empty plus the
 optional contact fields and the photo. Also the skills, because the LinkedIn PDF only
-brings the top three, and which subsection of the screen is open. The achievements of
-each job live in `ExperienceState`, which the Work experience subsection uses.
+brings the top three. It also keeps which subsection of the screen is open. The
+achievements of each job live in `ExperienceState`, which the Work experience
+subsection uses.
 """
 
 import asyncio
