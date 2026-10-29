@@ -226,6 +226,12 @@ def _tools_present() -> bool:
     return all(shutil.which(tool) for tool in TOOL_PACKAGES)
 
 
+def _missing_tools() -> tuple[str, ...]:
+    """Only the tools that are missing get installed: Fedora ships curl-minimal, and asking dnf
+    for curl as well is a conflict."""
+    return tuple(tool for tool in TOOL_PACKAGES if not shutil.which(tool))
+
+
 def required_prerequisites(platform: str = sys.platform) -> list[Prerequisite]:
     """What `platform` needs, in the order it has to be installed."""
     if platform == "darwin":
@@ -266,14 +272,15 @@ def required_prerequisites(platform: str = sys.platform) -> list[Prerequisite]:
         ]
     manager = linux_package_manager()
     manual = _LINUX_MANUAL.format(apt=" ".join(APT_PANGO_PACKAGES), dnf=" ".join(DNF_PANGO_PACKAGES))
-    tools_manual = _LINUX_MANUAL.format(apt=" ".join(TOOL_PACKAGES), dnf=" ".join(TOOL_PACKAGES))
+    tools = _missing_tools()
+    tools_manual = _LINUX_MANUAL.format(apt=" ".join(tools), dnf=" ".join(tools))
     return [
         Prerequisite(
             "curl and unzip",
             TOOLS_REASON,
             tools_manual,
             _tools_present,
-            _linux_installer(manager, TOOL_PACKAGES, TOOL_PACKAGES),
+            _linux_installer(manager, tools, tools),
             needs_admin=True,
         ),
         Prerequisite(

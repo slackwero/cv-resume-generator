@@ -119,10 +119,37 @@ def test_curl_and_unzip_come_from_the_package_manager(
     monkeypatch: pytest.MonkeyPatch, recorder: Recorder, log: TextIO
 ) -> None:
     fake_linux(monkeypatch, "dnf")
+    tools_missing(monkeypatch, "curl", "unzip")
     install = named("linux", "curl and unzip").install
     assert install is not None
     assert install(log) is True
     assert recorder.commands == [["sudo", "dnf", "install", "-y", "curl", "unzip"]]
+
+
+def test_fedora_installs_only_the_missing_tool(
+    monkeypatch: pytest.MonkeyPatch, recorder: Recorder, log: TextIO
+) -> None:
+    """Fedora ships curl-minimal: asking dnf for curl as well conflicts with it."""
+    fake_linux(monkeypatch, "dnf")
+    tools_missing(monkeypatch, "unzip")
+    install = named("linux", "curl and unzip").install
+    assert install is not None
+    assert install(log) is True
+    assert recorder.commands == [["sudo", "dnf", "install", "-y", "unzip"]]
+
+
+def test_debian_installs_only_the_missing_tool(
+    monkeypatch: pytest.MonkeyPatch, recorder: Recorder, log: TextIO
+) -> None:
+    fake_linux(monkeypatch, "apt-get")
+    tools_missing(monkeypatch, "curl")
+    install = named("linux", "curl and unzip").install
+    assert install is not None
+    assert install(log) is True
+    assert recorder.commands == [
+        ["sudo", "apt-get", "update"],
+        ["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "curl"],
+    ]
 
 
 def test_root_installs_without_sudo(monkeypatch: pytest.MonkeyPatch, recorder: Recorder, log: TextIO) -> None:
@@ -164,6 +191,12 @@ def test_an_unknown_linux_explains_instead_of_installing(monkeypatch: pytest.Mon
             "curl and unzip",
             "sudo apt-get update && sudo apt-get install -y curl unzip",
             "sudo dnf install -y curl unzip",
+        ),
+        (
+            ("unzip",),
+            "curl and unzip",
+            "sudo apt-get update && sudo apt-get install -y unzip",
+            "sudo dnf install -y unzip",
         ),
     ],
 )
