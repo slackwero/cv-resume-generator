@@ -94,3 +94,17 @@ def test_a_closed_job_shows_both_dates() -> None:
     job = Experience(company="Northwind", role="Platform Engineer", start="2020-04", end="2024-08")
 
     assert job.period() == "2020-04 — 2024-08"
+
+
+def test_a_profile_saved_before_editing_loads_with_empty_defaults() -> None:
+    experience = Experience.model_validate(
+        {
+            "company": "Acme Cloud",
+            "role": "DevSecOps Engineer",
+            "start": "2022-03",
+            "achievements": [{"id": "achievement-x", "text": "Did a thing.", "imported_value": "Did a thing."}],
+        }
+    )
+
+    assert experience.dismissed_achievements == []
+    assert experience.achievements[0].copy_of is None

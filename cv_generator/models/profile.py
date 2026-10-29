@@ -75,6 +75,10 @@ class Achievement(BaseModel):
     # field is what tells "I edited it" apart from "it changed on LinkedIn" when syncing.
     imported_value: str | None = None
 
+    # The id of the achievement in the same job that this one was duplicated from. It lets
+    # a new CV start a copy unchecked, so the CV does not repeat the same achievement twice.
+    copy_of: str | None = None
+
 
 class Experience(BaseModel):
     """A job with its pool of achievements."""
@@ -87,6 +91,10 @@ class Experience(BaseModel):
     end: YearMonth | None = None
     current: bool = False
     achievements: list[Achievement] = Field(default_factory=list)
+
+    # The LinkedIn texts of the achievements you deleted from this job. Without them the
+    # sync would propose again what you removed, just like `dismissed_skills`.
+    dismissed_achievements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_date_consistency(self) -> "Experience":
