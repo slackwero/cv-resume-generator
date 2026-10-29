@@ -129,7 +129,9 @@ jobs:
         shell: pwsh
         run: Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\.local\bin"
       # --yes lets the launcher install what is missing (Pango, and Homebrew or MSYS2 where
-      # needed) without asking. It keeps running in the background for the next steps.
+      # needed) without asking. It keeps running in the background for the next steps. On
+      # Windows it gets a console of its own, as with a double-click: started in the step's
+      # console, it was gone, without a word, as soon as the step ended.
       - name: Start the launcher (Linux and macOS)
         if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
@@ -146,7 +148,7 @@ jobs:
             -WorkingDirectory $dir `
             -RedirectStandardOutput (Join-Path $dir 'launcher.out') `
             -RedirectStandardError (Join-Path $dir 'launcher.err') `
-            -PassThru -NoNewWindow
+            -PassThru
           Set-Content -Path (Join-Path $dir 'launcher.pid') -Value $p.Id
           # Diagnostic: the first CI run lost the launcher within seconds with no output.
           # Watch it inside this step, so the log shows whether it dies on its own or only
