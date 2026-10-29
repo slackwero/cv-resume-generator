@@ -174,7 +174,7 @@ def test_an_install_that_needs_a_password_that_is_refused_stops(
     assert "Do it by hand." in out
 
 
-def test_a_failed_install_points_to_the_log(
+def test_a_failed_install_points_to_the_log_and_to_the_manual_steps(
     calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(prerequisites, "required_prerequisites", lambda: [missing(lambda log: False)])
@@ -182,6 +182,7 @@ def test_a_failed_install_points_to_the_log(
     out = capsys.readouterr().out
     assert "Installing Pango did not work." in out
     assert str(tmp_path / "start.log") in out
+    assert "Do it by hand." in out
 
 
 def test_an_install_that_leaves_it_missing_is_a_failure(
@@ -189,7 +190,9 @@ def test_an_install_that_leaves_it_missing_is_a_failure(
 ) -> None:
     monkeypatch.setattr(prerequisites, "required_prerequisites", lambda: [missing(lambda log: True)])
     assert main(["--yes"], folder=tmp_path) == 1
-    assert "Installing Pango did not work." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Installing Pango did not work." in out
+    assert "Do it by hand." in out
 
 
 def test_the_first_start_warns_that_it_is_slow(

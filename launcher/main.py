@@ -78,7 +78,7 @@ def _install_missing(args: argparse.Namespace, log: TextIO, log_path: Path) -> N
             raise _Failure(f"Installing {item.name} needs an administrator password. {item.manual_help}")
         console.say(f"Installing {item.name}...")
         if not item.install(log) or not item.is_present():
-            raise _Failure(f"Installing {item.name} did not work. The details are in {log_path}.")
+            raise _Failure(f"Installing {item.name} did not work. The details are in {log_path}. {item.manual_help}")
 
 
 def _run(args: argparse.Namespace, folder: Path, started: list[subprocess.Popen[bytes]]) -> int:
