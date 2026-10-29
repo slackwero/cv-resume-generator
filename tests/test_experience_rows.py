@@ -7,7 +7,7 @@ flat list. The state that saves them runs only in the browser.
 import pytest
 
 from cv_generator.app.components.work_experience import work_experience
-from cv_generator.app.states.experience_state import achievement_rows
+from cv_generator.app.states.experience_state import achievement_rows, form_is_on_screen
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.services.achievements import add_achievement
 from tests.test_models_personal import REQUIRED
@@ -84,3 +84,39 @@ def test_every_row_carries_the_same_keys(profile: MasterProfile) -> None:
 
 def test_the_editor_renders() -> None:
     assert work_experience().render()
+
+
+# An error shows inside the open form only while that form is on screen. After "That
+# achievement no longer exists" its row is gone, and the error goes above the list.
+
+
+def test_no_open_form_is_not_on_screen(profile: MasterProfile) -> None:
+    assert not form_is_on_screen(achievement_rows(profile), editing_key="", adding_to="", confirming_key="")
+
+
+@pytest.mark.parametrize(
+    "open_form",
+    [
+        {"editing_key": "exp-acme|achievement-triage"},
+        {"confirming_key": "exp-acme|achievement-llm"},
+        {"adding_to": "exp-north"},
+    ],
+)
+def test_a_form_whose_row_is_listed_is_on_screen(profile: MasterProfile, open_form: dict[str, str]) -> None:
+    form = {"editing_key": "", "adding_to": "", "confirming_key": "", **open_form}
+
+    assert form_is_on_screen(achievement_rows(profile), **form)
+
+
+@pytest.mark.parametrize(
+    "open_form",
+    [
+        {"editing_key": "exp-acme|achievement-deleted"},
+        {"confirming_key": "exp-acme|achievement-deleted"},
+        {"adding_to": "exp-deleted"},
+    ],
+)
+def test_a_form_whose_row_is_gone_is_not_on_screen(profile: MasterProfile, open_form: dict[str, str]) -> None:
+    form = {"editing_key": "", "adding_to": "", "confirming_key": "", **open_form}
+
+    assert not form_is_on_screen(achievement_rows(profile), **form)

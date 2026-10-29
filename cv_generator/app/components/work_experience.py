@@ -33,6 +33,19 @@ from cv_generator.app.styles import (
 # Compact on desktop, a finger's width on touch: a long list of jobs carries many of these.
 _SMALL_BUTTON = {"min_height": ["2.75rem", "2.75rem", "2rem"], "padding": "0 0.75rem"}
 
+# Read by screen readers and not drawn: the usual clip down to one pixel.
+_VISUALLY_HIDDEN = {
+    "position": "absolute",
+    "width": "1px",
+    "height": "1px",
+    "margin": "-1px",
+    "padding": "0",
+    "border": "0",
+    "overflow": "hidden",
+    "clip": "rect(0, 0, 0, 0)",
+    "white_space": "nowrap",
+}
+
 
 def _tag(label: str, color: str = AMBER, *, solid: bool = False) -> rx.Component:
     """Outlined in `color`, or a solid plate of it with the text in glass."""
@@ -85,6 +98,39 @@ def _form_box(*children: rx.Component, **props: object) -> rx.Component:
         *children,
         style={"border": f"1px solid {AMBER}", "padding": "0.75rem", "margin": "0.5rem 0 0.5rem 1.5rem"},
         **props,
+    )
+
+
+def _notice(message: rx.Var, **style: str) -> rx.Component:
+    """An error, drawn like the notices of the other subsections of My profile."""
+    return rx.el.div(
+        rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
+        rx.el.p(
+            message,
+            style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
+        ),
+        style={
+            "display": "flex",
+            "gap": "0.75rem",
+            "align_items": "flex-start",
+            "border": f"1px solid {RULE_LINE}",
+            "border_left": f"2px solid {AMBER}",
+            "padding": "0.875rem 1rem",
+            **style,
+        },
+    )
+
+
+def _form_error() -> rx.Component:
+    """The error of the open form, right above its buttons, where the eye already is.
+
+    Only one form is open at a time, so it is this one's. It is not a live region:
+    `_error_notice` announces it, once.
+    """
+    return rx.cond(
+        (ExperienceState.error != "") & ExperienceState.error_in_form,
+        _notice(ExperienceState.error, margin_top="0.625rem"),
+        rx.fragment(),
     )
 
 
@@ -172,6 +218,7 @@ def _confirmation(row: rx.Var) -> rx.Component:
             rx.cond(row["origin"] != "yours", " The LinkedIn sync will not offer it again.", ""),
             style={"font_stretch": "100%", "font_size": "0.8125rem", "color": TEXT, "line_height": "1.5"},
         ),
+        _form_error(),
         rx.el.div(
             primary_button(
                 "Delete", type="button", on_click=ExperienceState.confirm_delete(row["key"]), style=_SMALL_BUTTON
@@ -257,6 +304,7 @@ def _editor(row: rx.Var) -> rx.Component:
             ),
             rx.fragment(),
         ),
+        _form_error(),
         _form_buttons(
             "Save",
             ExperienceState.cancel_edit,
@@ -284,6 +332,7 @@ def _add(row: rx.Var) -> rx.Component:
         ExperienceState.adding_to == row["experience_id"],
         _form_box(
             _textarea(placeholder="What did you do, and what came of it?", aria_label="New achievement"),
+            _form_error(),
             _form_buttons("Add", ExperienceState.cancel_add),
             on_submit=ExperienceState.add,
         ),
@@ -326,29 +375,20 @@ def _row(row: rx.Var) -> rx.Component:
 
 
 def _error_notice() -> rx.Component:
-    """The error of the last operation, above the list, like the notices of the other subsections.
+    """The list's only live region: it announces every error once, wherever it is drawn.
 
-    It is not pinned to the bottom of the window: there it covered the Save and Cancel of
-    an editor opened near the bottom, the very buttons you need to fix the error.
+    Above the list it draws the errors of the actions that have no form (move, duplicate)
+    and of a form whose row is gone. The error of an open form is drawn inside that form,
+    next to its buttons, so here it is only read out. It is not pinned to the bottom of
+    the window: there it covered the buttons of an editor opened near the bottom.
     """
     return rx.el.div(
         rx.cond(
             ExperienceState.error != "",
-            rx.el.div(
-                rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-                rx.el.p(
-                    ExperienceState.error,
-                    style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-                ),
-                style={
-                    "display": "flex",
-                    "gap": "0.75rem",
-                    "align_items": "flex-start",
-                    "border": f"1px solid {RULE_LINE}",
-                    "border_left": f"2px solid {AMBER}",
-                    "padding": "0.875rem 1rem",
-                    "margin_bottom": "0.5rem",
-                },
+            rx.cond(
+                ExperienceState.error_in_form,
+                rx.el.span(ExperienceState.error, style=_VISUALLY_HIDDEN),
+                _notice(ExperienceState.error, margin_bottom="0.5rem"),
             ),
             rx.fragment(),
         ),

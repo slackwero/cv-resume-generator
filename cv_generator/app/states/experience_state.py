@@ -87,6 +87,20 @@ def achievement_rows(profile: MasterProfile) -> list[dict[str, str]]:
     return rows
 
 
+def form_is_on_screen(rows: list[dict[str, str]], *, editing_key: str, adding_to: str, confirming_key: str) -> bool:
+    """Whether the open form still has its row in the list.
+
+    After "That achievement no longer exists" the row is gone, and so would be an error
+    shown inside its form.
+    """
+    keys = {row["key"] for row in rows}
+    return (
+        (editing_key != "" and editing_key in keys)
+        or (confirming_key != "" and confirming_key in keys)
+        or (adding_to != "" and f"{adding_to}|add" in keys)
+    )
+
+
 def _ids_of(key: str) -> tuple[str, str]:
     """The job and achievement ids of a row key.
 
@@ -112,6 +126,10 @@ class ExperienceState(rx.State):
     confirming_key: str = ""
 
     error: str = ""
+    # Where the error shows: inside the open form when it came from that form, next to its
+    # buttons; above the list for the actions that have no form (move, duplicate) and for
+    # a form whose row is gone.
+    error_in_form: bool = False
     # Part of the editor's `key`. It goes up with every operation that saves, so the editor
     # is mounted again with the saved text; a rejected one keeps what you typed while the
     # error shows.
@@ -143,12 +161,13 @@ class ExperienceState(rx.State):
         self.rows = achievement_rows(profile)
         self.open_jobs = {experience.id: self.open_jobs.get(experience.id, False) for experience in profile.experiences}
 
-    async def _change(self, operation: Callable[[MasterProfile], MasterProfile]) -> None:
+    async def _change(self, operation: Callable[[MasterProfile], MasterProfile], *, from_form: bool) -> None:
         """Applies an operation on the achievements and saves it right away.
 
         It starts from the profile on disk and not from the one loaded when the screen
         opened: if you synced in another tab in the meantime, saving the old one would
-        erase that.
+        erase that. `from_form` says whether it was sent from the open form, where its
+        error then shows.
         """
         self.error = ""
         on_disk: MasterProfile | None = None
@@ -164,6 +183,12 @@ class ExperienceState(rx.State):
             # no longer exists" it would keep offering the row that fails.
             if on_disk is not None:
                 self._show(on_disk)
+            self.error_in_form = from_form and form_is_on_screen(
+                self.rows,
+                editing_key=self.editing_key,
+                adding_to=self.adding_to,
+                confirming_key=self.confirming_key,
+            )
             return
 
         self.version += 1
@@ -201,14 +226,17 @@ class ExperienceState(rx.State):
         experience_id, achievement_id = _ids_of(self.editing_key)
         text = str(data.get("text", ""))
         await self._change(
-            lambda profile: achievement_operations.edit_achievement(profile, experience_id, achievement_id, text)
+            lambda profile: achievement_operations.edit_achievement(profile, experience_id, achievement_id, text),
+            from_form=True,
         )
 
     @rx.event
     async def restore(self, key: str) -> None:
         experience_id, achievement_id = _ids_of(key)
         await self._change(
-            lambda profile: achievement_operations.restore_linkedin_text(profile, experience_id, achievement_id)
+            lambda profile: achievement_operations.restore_linkedin_text(profile, experience_id, achievement_id),
+            # The button lives in the open editor.
+            from_form=True,
         )
 
     # ------------------------------------------------------- duplicate and move
@@ -217,7 +245,8 @@ class ExperienceState(rx.State):
     async def duplicate(self, key: str) -> None:
         experience_id, achievement_id = _ids_of(key)
         await self._change(
-            lambda profile: achievement_operations.duplicate_achievement(profile, experience_id, achievement_id)
+            lambda profile: achievement_operations.duplicate_achievement(profile, experience_id, achievement_id),
+            from_form=False,
         )
 
     @rx.event
@@ -227,7 +256,8 @@ class ExperienceState(rx.State):
             return
         experience_id, achievement_id = _ids_of(key)
         await self._change(
-            lambda profile: achievement_operations.move_achievement(profile, experience_id, achievement_id, offset)
+            lambda profile: achievement_operations.move_achievement(profile, experience_id, achievement_id, offset),
+            from_form=False,
         )
 
     # ------------------------------------------------------------------ delete
@@ -251,7 +281,8 @@ class ExperienceState(rx.State):
             return
         experience_id, achievement_id = _ids_of(key)
         await self._change(
-            lambda profile: achievement_operations.remove_achievement(profile, experience_id, achievement_id)
+            lambda profile: achievement_operations.remove_achievement(profile, experience_id, achievement_id),
+            from_form=True,
         )
 
     # --------------------------------------------------------------------- add
@@ -274,4 +305,6 @@ class ExperienceState(rx.State):
             return
         experience_id = self.adding_to
         text = str(data.get("text", ""))
-        await self._change(lambda profile: achievement_operations.add_achievement(profile, experience_id, text))
+        await self._change(
+            lambda profile: achievement_operations.add_achievement(profile, experience_id, text), from_form=True
+        )
