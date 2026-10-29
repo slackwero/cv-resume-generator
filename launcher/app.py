@@ -26,6 +26,7 @@ STOP_GRACE_SECONDS = 15.0
 APP_TITLE = "<title>CV Generator</title>"
 
 _HTTP_TIMEOUT_SECONDS = 5
+_KILL_SETTLE_SECONDS = 2.0
 _POLL_SECONDS = 1.0
 _WAIT_REPORT_SECONDS = 60
 _IS_WINDOWS = sys.platform == "win32"
@@ -157,15 +158,29 @@ def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECON
         return
 
     group = process.pid  # process_group=0 makes the child the leader of its own group
-    with contextlib.suppress(ProcessLookupError):
+    process.poll()  # reap a leader that already exited, so the signals below have a live target
+    # EPERM is what macOS answers for a group with nothing but zombies left: nothing to stop.
+    with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(group, signal.SIGINT)
         deadline = time.monotonic() + grace
         while _group_alive(process, group):
             if time.monotonic() >= deadline:
                 os.killpg(group, signal.SIGKILL)
+                _wait_for_group(process, group, _KILL_SETTLE_SECONDS)
                 break
             time.sleep(0.05)
     process.wait()
+
+
+def _wait_for_group(process: "subprocess.Popen[bytes]", group: int, seconds: float) -> None:
+    """Waits (bounded) until the group is gone; SIGKILL is delivered, not instant.
+
+    Returning earlier would let a caller restart the app while a dying member still holds
+    its port.
+    """
+    deadline = time.monotonic() + seconds
+    while _group_alive(process, group) and time.monotonic() < deadline:
+        time.sleep(0.02)
 
 
 def _group_alive(process: "subprocess.Popen[bytes]", group: int) -> bool:

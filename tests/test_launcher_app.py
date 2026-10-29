@@ -1,4 +1,6 @@
+import contextlib
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -45,6 +47,32 @@ def pid_alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+def wait_until_zombie(pid: int, seconds: float = 10) -> None:
+    """Waits until the process has exited without reaping it (no sleep guesses)."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        state = subprocess.run(  # noqa: S603 - constant command, the pid is an int
+            ["ps", "-o", "stat=", "-p", str(pid)],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if state.startswith("Z"):
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"process {pid} never became a zombie")
+
+
+def _kill_leftovers(process: subprocess.Popen[bytes]) -> None:
+    """Safety net so a failing test never leaves 60 s sleepers behind."""
+    if sys.platform == "win32":
+        process.kill()
+    else:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(process.pid, signal.SIGKILL)
+    process.wait()
 
 
 def wait_for_file(path: Path, seconds: float = 10) -> str:
@@ -190,13 +218,16 @@ def test_stop_app_stops_the_whole_tree(tmp_path: Path, log: TextIO) -> None:
         "time.sleep(60)\n"
     )
     process = start_app([sys.executable, "-c", child_code], tmp_path, log)
-    grandchild = int(wait_for_file(pid_file))
-    stop_app(process)
-    assert not pid_alive(process.pid)
-    deadline = time.monotonic() + 5
-    while pid_alive(grandchild) and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert not pid_alive(grandchild)
+    try:
+        grandchild = int(wait_for_file(pid_file))
+        stop_app(process)
+        assert not pid_alive(process.pid)
+        deadline = time.monotonic() + 5
+        while pid_alive(grandchild) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not pid_alive(grandchild)
+    finally:
+        _kill_leftovers(process)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SIGINT is a POSIX signal")
@@ -209,11 +240,55 @@ def test_stop_app_stops_a_tree_that_ignores_ctrl_c(tmp_path: Path, log: TextIO) 
         "time.sleep(60)\n"
     )
     process = start_app([sys.executable, "-c", code], tmp_path, log)
-    wait_for_file(ready)
-    started = time.monotonic()
-    stop_app(process, grace=1)
-    assert time.monotonic() - started < 5
-    assert not pid_alive(process.pid)
+    try:
+        wait_for_file(ready)
+        started = time.monotonic()
+        stop_app(process, grace=1)
+        assert time.monotonic() - started < 5
+        assert not pid_alive(process.pid)
+    finally:
+        _kill_leftovers(process)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups and SIGINT are POSIX")
+def test_stop_app_frees_the_port_of_a_member_that_outlives_the_leader(tmp_path: Path, log: TextIO) -> None:
+    """The leader exits on Ctrl+C but a worker ignores it and keeps the port: SIGKILL must finish the job."""
+    port = unused_port()
+    pid_file = tmp_path / "worker.pid"
+    worker_code = (
+        "import signal, socket, time\n"
+        "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+        "sock = socket.socket()\n"
+        f"sock.bind(('127.0.0.1', {port}))\n"
+        "sock.listen()\n"
+        f"open({str(pid_file)!r}, 'w').write(str(__import__('os').getpid()))\n"
+        "time.sleep(60)\n"
+    )
+    leader_code = (
+        f"import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', {worker_code!r}])\ntime.sleep(60)\n"
+    )
+    process = start_app([sys.executable, "-c", leader_code], tmp_path, log)
+    try:
+        worker = int(wait_for_file(pid_file))
+        stop_app(process, grace=1)
+        # No polling: stop_app must not return before the whole group is gone. The worker's
+        # pid may linger as a zombie for a moment (init reaps it); what matters is the port.
+        assert worker != process.pid
+        with socket.socket() as probe, pytest.raises(ConnectionRefusedError):
+            probe.connect(("127.0.0.1", port))
+    finally:
+        _kill_leftovers(process)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups and SIGINT are POSIX")
+def test_stop_app_handles_a_leader_that_exited_but_was_not_reaped(tmp_path: Path, log: TextIO) -> None:
+    process = start_app([sys.executable, "-c", "pass"], tmp_path, log)
+    try:
+        wait_until_zombie(process.pid)  # exited, and nobody has called wait() or poll() yet
+        stop_app(process, grace=1)
+        assert process.returncode == 0
+    finally:
+        _kill_leftovers(process)
 
 
 def test_open_browser_reports_failure_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
