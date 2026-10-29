@@ -129,43 +129,13 @@ jobs:
         shell: pwsh
         run: Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\.local\bin"
       # --yes lets the launcher install what is missing (Pango, and Homebrew or MSYS2 where
-      # needed) without asking. It keeps running in the background for the next steps. On
-      # Windows it gets a console of its own, as with a double-click: started in the step's
-      # console, it was gone, without a word, as soon as the step ended.
+      # needed) without asking. It keeps running in the background for the next steps.
       - name: Start the launcher (Linux and macOS)
         if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: |
           ./start.sh --yes --no-browser > launcher.out 2>&1 < /dev/null &
           echo $! > launcher.pid
-      - name: Start the launcher (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
-        run: |
-          $dir = $PWD.Path
-          $p = Start-Process cmd.exe -ArgumentList '/c', 'start.bat', '--yes', '--no-browser' `
-            -WorkingDirectory $dir `
-            -RedirectStandardOutput (Join-Path $dir 'launcher.out') `
-            -RedirectStandardError (Join-Path $dir 'launcher.err') `
-            -PassThru
-          Set-Content -Path (Join-Path $dir 'launcher.pid') -Value $p.Id
-          # Diagnostic: the first CI run lost the launcher within seconds with no output.
-          # Watch it inside this step, so the log shows whether it dies on its own or only
-          # when the step ends.
-          for ($i = 1; $i -le 30; $i++) {
-            Start-Sleep -Seconds 2
-            $alive = [bool](Get-Process -Id $p.Id -ErrorAction SilentlyContinue)
-            $out = (Get-Item launcher.out).Length
-            $err = (Get-Item launcher.err).Length
-            Write-Host "t=$($i * 2)s alive=$alive out=$out err=$err"
-            if (-not $alive) { break }
-          }
-          Get-Process cmd, powershell, uv, python -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime
-          foreach ($f in 'launcher.out', 'launcher.err') {
-            Write-Host "== $f"
-            Get-Content $f -ErrorAction SilentlyContinue
-          }
       # The start step returns at once, but uv may not exist until the start file has installed
       # it, and the smoke test's `uv run` must not sync the .venv the launcher is still
       # building. So wait for the launcher's own "running" line, and fail early, with its
@@ -194,34 +164,9 @@ jobs:
           echo "The app did not start within 25 minutes."
           for f in launcher.out start.log; do echo "== $f"; cat "$f" || true; done
           exit 1
-      - name: Wait for the app (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
-        run: |
-          $id = [int](Get-Content launcher.pid)
-          for ($i = 1; $i -le 300; $i++) {
-            if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet -ErrorAction SilentlyContinue) { exit 0 }
-            if (-not (Get-Process -Id $id -ErrorAction SilentlyContinue)) {
-              Write-Host 'The launcher exited before the app was running.'
-              Get-Process cmd, powershell, uv, python -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime
-              foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
-                Write-Host "== $f"
-                if (Test-Path $f) { Get-Content $f -ErrorAction SilentlyContinue }
-              }
-              exit 1
-            }
-            if ($i % 12 -eq 0) { Write-Host "Still waiting for the app ($($i / 12) min)..." }
-            Start-Sleep -Seconds 5
-          }
-          Write-Host 'The app did not start within 25 minutes.'
-          foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
-            Write-Host "== $f"
-            if (Test-Path $f) { Get-Content $f -ErrorAction SilentlyContinue }
-          }
-          exit 1
       # The launcher serves everything on one port in this mode, hence the same port twice.
       - name: Smoke test the local-only protection
+        if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
       - name: A second start finds the running app (Linux and macOS)
@@ -233,17 +178,8 @@ jobs:
           cat second.out
           test "$rc" -eq 0
           grep -q 'already running' second.out
-      - name: A second start finds the running app (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
-        run: |
-          cmd /c start.bat --no-browser > second.out 2>&1
-          $rc = $LASTEXITCODE
-          Get-Content second.out
-          if ($rc -ne 0) { throw "start.bat exited with $rc" }
-          if (-not (Select-String -Path second.out -Pattern 'already running' -Quiet)) { throw 'no "already running" message' }
       - name: Launcher tests on this system
+        if: runner.os != 'Windows'
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: uv run --frozen pytest tests/test_launcher_console.py tests/test_launcher_prerequisites.py tests/test_launcher_app.py tests/test_launcher_main.py
       # uv forwards SIGTERM to the launcher, which stops the whole app tree and says so. Port
@@ -257,23 +193,67 @@ jobs:
           grep -q 'CV Generator stopped.' launcher.out
           for _ in $(seq 10); do (exec 3<>/dev/tcp/127.0.0.1/3000) 2>/dev/null || break; sleep 1; done
           ! (exec 3<>/dev/tcp/127.0.0.1/3000) 2>/dev/null
-      # Windows has no SIGTERM to send, so the whole tree goes down by force; then nothing
-      # may be left listening, which would mean the tree was not the whole story.
-      - name: Stop the launcher (Windows)
+      # The same checks as the steps above, in one step: on the Windows runner the launcher
+      # never outlived the step that started it. Twice it was gone within seconds of that
+      # step's end, once mid-install, although it lived on while the step did. The launcher
+      # gets a console of its own, as with a double-click. Windows has no SIGTERM to send, so
+      # at the end the whole tree goes down by force; then nothing may be left listening,
+      # which would mean the tree was not the whole story.
+      - name: Start, check and stop the launcher (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
         run: |
-          $id = [int](Get-Content launcher.pid)
-          taskkill /T /F /PID $id
-          if ($LASTEXITCODE -ne 0) { throw "taskkill exited with $LASTEXITCODE" }
+          $dir = $PWD.Path
+          $launcher = Start-Process cmd.exe -ArgumentList '/c', 'start.bat', '--yes', '--no-browser' `
+            -WorkingDirectory $dir `
+            -RedirectStandardOutput (Join-Path $dir 'launcher.out') `
+            -RedirectStandardError (Join-Path $dir 'launcher.err') `
+            -PassThru
+
+          Write-Host '::group::Wait for the app'
+          $running = $false
+          for ($i = 1; $i -le 300; $i++) {
+            if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet -ErrorAction SilentlyContinue) {
+              $running = $true
+              break
+            }
+            if ($launcher.HasExited) { break }
+            if ($i % 12 -eq 0) { Write-Host "Still waiting for the app ($($i / 12) min)..." }
+            Start-Sleep -Seconds 5
+          }
+          Write-Host '::endgroup::'
+          if (-not $running) { throw 'The launcher exited, or the app did not start within 25 minutes.' }
+
+          Write-Host '::group::Smoke test the local-only protection'
+          uv run --frozen python scripts/smoke_local_only.py --frontend-port 3000 --backend-port 3000 --timeout 120
+          if ($LASTEXITCODE -ne 0) { throw 'The smoke test failed.' }
+          Write-Host '::endgroup::'
+
+          Write-Host '::group::A second start finds the running app'
+          cmd /c start.bat --no-browser > second.out 2>&1
+          $rc = $LASTEXITCODE
+          Get-Content second.out
+          if ($rc -ne 0) { throw "The second start exited with $rc." }
+          if (-not (Select-String -Path second.out -Pattern 'already running' -Quiet)) { throw 'The second start did not find the running app.' }
+          Write-Host '::endgroup::'
+
+          Write-Host '::group::Launcher tests on this system'
+          uv run --frozen pytest tests/test_launcher_console.py tests/test_launcher_prerequisites.py tests/test_launcher_app.py tests/test_launcher_main.py
+          if ($LASTEXITCODE -ne 0) { throw 'The launcher tests failed.' }
+          Write-Host '::endgroup::'
+
+          Write-Host '::group::Stop the launcher'
+          taskkill /T /F /PID $launcher.Id
+          if ($LASTEXITCODE -ne 0) { throw "taskkill exited with $LASTEXITCODE." }
           $deadline = (Get-Date).AddSeconds(30)
           do {
             $listening = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
             if (-not $listening) { break }
             Start-Sleep -Seconds 1
           } while ((Get-Date) -lt $deadline)
-          if ($listening) { throw 'something still listens on port 3000' }
+          if ($listening) { throw 'Something still listens on port 3000.' }
+          Write-Host '::endgroup::'
       - name: Show the launcher logs
         if: failure()
         working-directory: ${{ runner.temp }}/Descargas de José/cv-resume-generator-main
