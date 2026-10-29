@@ -41,9 +41,12 @@ if (-not $uv) {
     # The installer would otherwise edit the person's PATH.
     $env:UV_NO_MODIFY_PATH = '1'
     # Started from PowerShell 7, this Windows PowerShell inherits PowerShell 7's
-    # module folders and cannot load the commands the installer needs from them
-    # (Get-ExecutionPolicy, Expand-Archive). Use the system's own module folders.
-    $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+    # module folders and cannot load commands the installer needs from them, such
+    # as Get-ExecutionPolicy. Use the system's own module folders, when it has any.
+    $machineModules = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+    if ($machineModules) {
+        $env:PSModulePath = $machineModules
+    }
     try {
         # Old Windows 10 builds default to older TLS versions.
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
