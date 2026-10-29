@@ -270,15 +270,14 @@ def _achievement(row: rx.Var) -> rx.Component:
 def _editor(row: rx.Var) -> rx.Component:
     """The achievement opened in place, with LinkedIn's text below when it has one.
 
-    The textarea's `key` carries the version, which only goes up when something is saved:
-    after a rejected save it keeps what you typed, so you can fix it.
+    A rejected save leaves it open with what you typed, so you can fix it.
     """
     return _form_box(
         rx.el.div(_origin_tag(row["origin"]), style={"display": "flex", "margin_bottom": "0.5rem"}),
         _textarea(
             default_value=row["text"],
             aria_label="Achievement text",
-            key=row["key"] + "-" + ExperienceState.version.to_string(),
+            key=row["key"],
         ),
         rx.cond(
             row["linkedin_text"] != "",

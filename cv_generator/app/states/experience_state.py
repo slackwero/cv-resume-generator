@@ -130,10 +130,6 @@ class ExperienceState(rx.State):
     # buttons; above the list for the actions that have no form (move, duplicate) and for
     # a form whose row is gone.
     error_in_form: bool = False
-    # Part of the editor's `key`. It goes up with every operation that saves, so the editor
-    # is mounted again with the saved text; a rejected one keeps what you typed while the
-    # error shows.
-    version: int = 0
 
     @rx.event
     def start(self) -> None:
@@ -191,7 +187,6 @@ class ExperienceState(rx.State):
             )
             return
 
-        self.version += 1
         self._show(updated)
         self._close_forms()
 
