@@ -183,12 +183,12 @@ jobs:
         run: |
           $id = [int](Get-Content launcher.pid)
           for ($i = 1; $i -le 300; $i++) {
-            if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet) { exit 0 }
+            if (Select-String -Path launcher.out -Pattern 'CV Generator is running at' -Quiet -ErrorAction SilentlyContinue) { exit 0 }
             if (-not (Get-Process -Id $id -ErrorAction SilentlyContinue)) {
               Write-Host 'The launcher exited before the app was running.'
               foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
                 Write-Host "== $f"
-                if (Test-Path $f) { Get-Content $f }
+                if (Test-Path $f) { Get-Content $f -ErrorAction SilentlyContinue }
               }
               exit 1
             }
@@ -198,7 +198,7 @@ jobs:
           Write-Host 'The app did not start within 25 minutes.'
           foreach ($f in 'launcher.out', 'launcher.err', 'start.log') {
             Write-Host "== $f"
-            if (Test-Path $f) { Get-Content $f }
+            if (Test-Path $f) { Get-Content $f -ErrorAction SilentlyContinue }
           }
           exit 1
       # The launcher serves everything on one port in this mode, hence the same port twice.
