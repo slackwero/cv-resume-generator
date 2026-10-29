@@ -16,7 +16,6 @@ from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.styles import (
     AMBER,
     GLASS,
-    GLASS_ETCHED,
     RULE_LINE,
     TEXT,
     TEXT_FAINT,
@@ -240,8 +239,8 @@ def _achievement(row: rx.Var) -> rx.Component:
 def _editor(row: rx.Var) -> rx.Component:
     """The achievement opened in place, with LinkedIn's text below when it has one.
 
-    The textarea's `key` carries the version: after a rejected save it is mounted again
-    with the saved text instead of keeping what you typed.
+    The textarea's `key` carries the version, which only goes up when something is saved:
+    after a rejected save it keeps what you typed, so you can fix it.
     """
     return _form_box(
         rx.el.div(_origin_tag(row["origin"]), style={"display": "flex", "margin_bottom": "0.5rem"}),
@@ -327,10 +326,10 @@ def _row(row: rx.Var) -> rx.Component:
 
 
 def _error_notice() -> rx.Component:
-    """The error of the last operation, pinned to the bottom of the window while the list is in view.
+    """The error of the last operation, above the list, like the notices of the other subsections.
 
-    The list runs to dozens of achievements: a notice at a fixed spot of the panel would
-    often be off screen, and an empty Save would look as if nothing happened.
+    It is not pinned to the bottom of the window: there it covered the Save and Cancel of
+    an editor opened near the bottom, the very buttons you need to fix the error.
     """
     return rx.el.div(
         rx.cond(
@@ -345,17 +344,15 @@ def _error_notice() -> rx.Component:
                     "display": "flex",
                     "gap": "0.75rem",
                     "align_items": "flex-start",
-                    "background": GLASS_ETCHED,
                     "border": f"1px solid {RULE_LINE}",
                     "border_left": f"2px solid {AMBER}",
                     "padding": "0.875rem 1rem",
-                    "margin_top": "1rem",
+                    "margin_bottom": "0.5rem",
                 },
             ),
             rx.fragment(),
         ),
         aria_live="polite",
-        style={"position": "sticky", "bottom": "0"},
     )
 
 
@@ -374,11 +371,16 @@ def work_experience() -> rx.Component:
                 "line_height": "1.5",
             },
         ),
-        rx.cond(
-            ExperienceState.rows.length() > 0,
-            rx.el.div(rx.foreach(ExperienceState.rows, _row), style={"width": "100%"}),
-            note_text("There are no jobs in your profile yet. They come in from the LinkedIn sync."),
-        ),
         _error_notice(),
+        # Nothing until the profile is read: otherwise the empty line flashes on every load.
+        rx.cond(
+            ExperienceState.has_profile,
+            rx.cond(
+                ExperienceState.rows.length() > 0,
+                rx.el.div(rx.foreach(ExperienceState.rows, _row), style={"width": "100%"}),
+                note_text("There are no jobs in your profile yet. They come in from the LinkedIn sync."),
+            ),
+            rx.fragment(),
+        ),
         style={"width": "100%", "padding": "1.5rem"},
     )

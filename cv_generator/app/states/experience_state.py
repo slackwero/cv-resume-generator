@@ -112,8 +112,9 @@ class ExperienceState(rx.State):
     confirming_key: str = ""
 
     error: str = ""
-    # Part of the editor's `key`. It goes up with every operation, so a rejected text
-    # shows the saved one again instead of keeping what you typed.
+    # Part of the editor's `key`. It goes up with every operation that saves, so the editor
+    # is mounted again with the saved text; a rejected one keeps what you typed while the
+    # error shows.
     version: int = 0
 
     @rx.event
@@ -150,7 +151,6 @@ class ExperienceState(rx.State):
         erase that.
         """
         self.error = ""
-        self.version += 1
         on_disk: MasterProfile | None = None
         try:
             on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
@@ -166,6 +166,7 @@ class ExperienceState(rx.State):
                 self._show(on_disk)
             return
 
+        self.version += 1
         self._show(updated)
         self._close_forms()
 
@@ -244,6 +245,10 @@ class ExperienceState(rx.State):
 
     @rx.event
     async def confirm_delete(self, key: str) -> None:
+        """Only the achievement whose question is open: the confirmation is required here
+        and not only on screen, and a second click on Delete arrives once it is gone."""
+        if not key or key != self.confirming_key:
+            return
         experience_id, achievement_id = _ids_of(key)
         await self._change(
             lambda profile: achievement_operations.remove_achievement(profile, experience_id, achievement_id)
