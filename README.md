@@ -22,23 +22,45 @@ as it was sent.
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), the Python package
   manager. It installs Python 3.12 for you if you do not have it.
-- [Node.js](https://nodejs.org/) 22.12 or newer. Reflex runs the interface with it, and
-  downloads the rest of its JavaScript tooling by itself the first time.
 - The native libraries [WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html)
   uses to draw the PDFs:
 
 ```bash
 # macOS (Homebrew)
-brew install pango cairo gdk-pixbuf libffi
+brew install pango
 
 # Debian / Ubuntu
 sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
 ```
 
+On Linux, `curl` and `unzip` too: Reflex uses them to download bun, which runs the
+interface.
+
 On Windows, the simplest route is [WSL](https://learn.microsoft.com/windows/wsl/) with the
 Debian / Ubuntu line above; for a native install, follow WeasyPrint's guide linked above.
 
 ## Installation
+
+### Quick start
+
+For people who do not use a terminal.
+
+1. On GitHub, click **Code → Download ZIP**, then unzip it.
+2. **macOS:** double-click `start.command`. The first time, macOS blocks it because it
+   was downloaded: right-click it, choose **Open**, then **Open** again. Only once.
+3. **Linux:** open a terminal in the folder and run `./start.sh`. If it says
+   "Permission denied", run `bash start.sh`.
+4. Say yes to what it offers to install. On macOS that is Homebrew, which asks for your
+   password, and Pango. On Linux it is Pango, curl and unzip, with your password. The
+   first start takes a few minutes (on a Mac without Homebrew, 10 to 20 more); the next
+   ones take seconds, with no questions.
+5. The browser opens on the app. If it does not, go to <http://localhost:3000>. To stop
+   the app, close the window or press Ctrl+C. If something fails, `start.log` in the same
+   folder says what happened.
+
+If the app is already running, starting it again just opens the browser.
+
+### For developers
 
 ```bash
 git clone https://github.com/slackwero/cv-resume-generator.git
@@ -47,6 +69,8 @@ uv sync
 ```
 
 ## Usage
+
+The quick start above already runs the app. Developers start it in development mode:
 
 ```bash
 uv run reflex run
@@ -67,6 +91,23 @@ PDFs in `output/`, both excluded from git.
 > refuses requests from other websites open in your browser. In development mode
 > (`uv run reflex run`), other computers on your network can still load the interface's
 > code from port 3000, but not your data.
+>
+> Started with `start.command` or `start.sh`, the app runs in production mode on one
+> port, behind that same protection: nothing in it, interface included, is reachable
+> from other computers.
+
+### Not yet tested on real hardware
+
+CI starts the app from the ZIP GitHub serves on Ubuntu, macOS and Windows runners, in a
+folder with a space and an accent, with Node.js hidden. It also starts it from scratch in
+Ubuntu 24.04 and Fedora containers. What it cannot cover:
+
+- The first double-click and Gatekeeper on a Mac that downloaded the ZIP.
+- Installing Homebrew from nothing.
+- Linux desktops: CI runs containers, not desktops.
+- Distributions without apt or dnf. The launcher explains the manual steps.
+
+If you can try one of these, the checklist is in [docs/manual-testing.md](docs/manual-testing.md).
 
 ### Your first CV
 
