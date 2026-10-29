@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from cv_generator.models.profile import MasterProfile
+from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.storage.repo import read_json, save_json
 
 PROFILE_FILE = "profile.json"
@@ -91,6 +91,17 @@ def save_profile(data_dir: Path, profile: MasterProfile) -> None:
     """Persists the master profile."""
     data_dir.mkdir(parents=True, exist_ok=True)
     save_json(data_dir / PROFILE_FILE, profile.model_dump(mode="json"))
+
+
+def with_personal(profile: MasterProfile, personal: PersonalInfo) -> MasterProfile:
+    """Returns the profile with these contact details and everything else as it was.
+
+    The photo is kept from the given profile: it saves on its own, and the contact form
+    does not carry it. The given profile is not modified.
+    """
+    result = profile.model_copy(deep=True)
+    result.personal = personal.model_copy(update={"photo": profile.personal.photo})
+    return result
 
 
 def load_sync_status(data_dir: Path) -> SyncStatus | None:

@@ -17,7 +17,7 @@ from cv_generator.app.config import DATA_DIR
 from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.services import skills as skill_operations
 from cv_generator.services.photo import MAX_SIZE_BYTES, process_photo, set_photo
-from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile
+from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile, with_personal
 
 FIELD_LABELS = {
     "first_name": "First name",
@@ -186,18 +186,19 @@ class ProfileState(rx.State):
             on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
             if on_disk is None:
                 raise ValueError("There is no profile yet. Sync with LinkedIn first.")
-            updated = on_disk.model_copy(deep=True)
-            updated.personal = PersonalInfo(
-                first_name=self.first_name.strip(),
-                last_name=self.last_name.strip(),
-                profession=self.profession.strip(),
-                phone=self.phone.strip(),
-                email=self.email.strip(),
-                website=self.website.strip() or None,
-                country=self.country.strip() or None,
-                address=self.address.strip() or None,
-                birth_date=self._date_or_none(),
-                photo=on_disk.personal.photo,
+            updated = with_personal(
+                on_disk,
+                PersonalInfo(
+                    first_name=self.first_name.strip(),
+                    last_name=self.last_name.strip(),
+                    profession=self.profession.strip(),
+                    phone=self.phone.strip(),
+                    email=self.email.strip(),
+                    website=self.website.strip() or None,
+                    country=self.country.strip() or None,
+                    address=self.address.strip() or None,
+                    birth_date=self._date_or_none(),
+                ),
             )
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:

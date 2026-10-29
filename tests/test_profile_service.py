@@ -1,15 +1,18 @@
 from datetime import datetime
 from pathlib import Path
 
-from cv_generator.models.profile import MasterProfile
+from cv_generator.models.profile import Achievement, Experience, MasterProfile, PersonalInfo
 from cv_generator.services.profile import (
     SyncStatus,
     load_profile,
     load_sync_status,
     save_profile,
     save_sync_status,
+    with_personal,
 )
 from tests.test_models_personal import REQUIRED
+
+PHOTO = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
 
 
 def test_without_saved_profile_returns_none(tmp_path: Path) -> None:
@@ -60,3 +63,38 @@ def test_reads_the_sync_status_already_on_disk(tmp_path: Path) -> None:
     status = load_sync_status(tmp_path)
 
     assert status is not None and status.ok
+
+
+def _profile_with_photo_and_achievements() -> MasterProfile:
+    return MasterProfile(
+        personal=PersonalInfo(**REQUIRED, photo=PHOTO),
+        experiences=[
+            Experience(
+                company="Northwind",
+                role="Platform Engineer",
+                start="2020-04",
+                current=True,
+                achievements=[Achievement(text="Designed a RAG pipeline over runbooks.")],
+            )
+        ],
+    )
+
+
+def test_saving_the_contact_details_keeps_the_achievements_and_the_photo() -> None:
+    """The form only knows the contact fields: the rest comes from the profile on disk."""
+    on_disk = _profile_with_photo_and_achievements()
+
+    updated = with_personal(on_disk, PersonalInfo(**{**REQUIRED, "first_name": "Janet"}))
+
+    assert updated.personal.first_name == "Janet"
+    assert updated.personal.photo == PHOTO
+    assert updated.experiences == on_disk.experiences
+
+
+def test_saving_the_contact_details_does_not_touch_the_given_profile() -> None:
+    on_disk = _profile_with_photo_and_achievements()
+    before = on_disk.model_dump()
+
+    with_personal(on_disk, PersonalInfo(**{**REQUIRED, "first_name": "Janet"}))
+
+    assert on_disk.model_dump() == before
