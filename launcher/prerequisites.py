@@ -74,11 +74,15 @@ MSYS2_REASON = (
     "MSYS2 is a free collection of tools for Windows. CV Generator uses it to get the libraries that draw your PDFs."
 )
 
-_AGAIN = "then start CV Generator again."
+# Every command the person may copy stands on a line of its own: punctuation after it on the
+# same line ends up in the terminal too ("brew install pango," finds no such package).
+_AGAIN = "Then start CV Generator again."
 _LINUX_MANUAL = (
-    "On Debian or Ubuntu run: sudo apt-get update && sudo apt-get install -y {apt}; "
-    "on Fedora run: sudo dnf install -y {dnf}; "
-    "on another Linux: Install Pango, curl and unzip with your distribution's package manager; "
+    "On Debian or Ubuntu, run:\n"
+    "    sudo apt-get update && sudo apt-get install -y {apt}\n"
+    "On Fedora, run:\n"
+    "    sudo dnf install -y {dnf}\n"
+    "On another Linux, install Pango, curl and unzip with your distribution's package manager.\n"
 ) + _AGAIN
 
 
@@ -229,7 +233,7 @@ def required_prerequisites(platform: str = sys.platform) -> list[Prerequisite]:
             Prerequisite(
                 "Homebrew",
                 HOMEBREW_REASON,
-                f"Install Homebrew from https://brew.sh, {_AGAIN}",
+                f"Install Homebrew from https://brew.sh\n{_AGAIN}",
                 lambda: find_brew() is not None,
                 _install_homebrew,
                 needs_admin=True,
@@ -237,7 +241,7 @@ def required_prerequisites(platform: str = sys.platform) -> list[Prerequisite]:
             Prerequisite(
                 "Pango",
                 PANGO_REASON,
-                f"Open Terminal and run: brew install pango, {_AGAIN}",
+                f"Open Terminal and run:\n    brew install pango\n{_AGAIN}",
                 macos_pdf_libraries_present,
                 _install_pango_with_brew,
             ),
@@ -248,14 +252,14 @@ def required_prerequisites(platform: str = sys.platform) -> list[Prerequisite]:
             Prerequisite(
                 "MSYS2",
                 MSYS2_REASON,
-                f"Install MSYS2 from https://www.msys2.org, installed in C:\\msys64, {_AGAIN}",
+                f"Install MSYS2 from https://www.msys2.org into C:\\msys64\n{_AGAIN}",
                 lambda: Path(MSYS2_BASH).exists(),
                 _install_msys2 if has_winget else None,
             ),
             Prerequisite(
                 "Pango",
                 PANGO_REASON,
-                f'Open "MSYS2 MINGW64" from the Start menu and run: pacman -S mingw-w64-x86_64-pango, {_AGAIN}',
+                f'Open "MSYS2 MINGW64" from the Start menu and run:\n    pacman -S mingw-w64-x86_64-pango\n{_AGAIN}',
                 windows_pdf_libraries_present,
                 _install_pango_with_msys2,
             ),

@@ -45,6 +45,14 @@ def fake_linux(monkeypatch: pytest.MonkeyPatch, manager: str | None, *, root: bo
     monkeypatch.setattr(prerequisites, "is_root", lambda: root)
 
 
+def tools_missing(monkeypatch: pytest.MonkeyPatch, *missing: str) -> None:
+    monkeypatch.setattr(prerequisites.shutil, "which", lambda name: None if name in missing else f"/usr/bin/{name}")
+
+
+def manual_lines(item: Prerequisite) -> list[str]:
+    return [line.strip() for line in item.manual_help.splitlines()]
+
+
 def test_a_mac_without_homebrew_needs_homebrew_then_pango(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(prerequisites, "find_brew", lambda: None)
     monkeypatch.setattr(prerequisites, "macos_pdf_libraries_present", lambda: False)
@@ -138,7 +146,49 @@ def test_an_unknown_linux_explains_instead_of_installing(monkeypatch: pytest.Mon
     items = required_prerequisites("linux")
     assert items
     assert all(p.install is None for p in items)
-    assert all("package manager" in p.manual_help or "apt" in p.manual_help for p in items)
+    generic = "On another Linux, install Pango, curl and unzip with your distribution's package manager."
+    assert all(generic in manual_lines(p) for p in items)
+
+
+@pytest.mark.parametrize(
+    ("missing", "name", "apt", "dnf"),
+    [
+        (
+            (),
+            "Pango",
+            "sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0",
+            "sudo dnf install -y pango",
+        ),
+        (
+            ("curl", "unzip"),
+            "curl and unzip",
+            "sudo apt-get update && sudo apt-get install -y curl unzip",
+            "sudo dnf install -y curl unzip",
+        ),
+    ],
+)
+def test_the_linux_manual_steps_put_each_command_on_a_line_of_its_own(
+    monkeypatch: pytest.MonkeyPatch, missing: tuple[str, ...], name: str, apt: str, dnf: str
+) -> None:
+    """A command the person copies must not end in punctuation that the shell would read."""
+    tools_missing(monkeypatch, *missing)
+    lines = manual_lines(named("linux", name))
+    assert apt in lines
+    assert dnf in lines
+
+
+@pytest.mark.parametrize(
+    ("platform", "name", "command"),
+    [("darwin", "Pango", "brew install pango"), ("win32", "Pango", "pacman -S mingw-w64-x86_64-pango")],
+)
+def test_a_command_to_copy_stands_on_a_line_of_its_own(platform: str, name: str, command: str) -> None:
+    assert command in manual_lines(named(platform, name))
+
+
+@pytest.mark.parametrize("platform", ["darwin", "win32", "linux"])
+def test_every_manual_step_ends_by_saying_to_start_again(platform: str) -> None:
+    for item in required_prerequisites(platform):
+        assert manual_lines(item)[-1] == "Then start CV Generator again."
 
 
 def test_windows_gets_msys2_from_winget(monkeypatch: pytest.MonkeyPatch, recorder: Recorder, log: TextIO) -> None:
