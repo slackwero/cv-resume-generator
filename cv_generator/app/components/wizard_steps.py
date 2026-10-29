@@ -1452,7 +1452,7 @@ def _skill_row(skill: rx.Var, index: rx.Var) -> rx.Component:
     )
 
 
-def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler) -> rx.Component:
+def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler, **style: str) -> rx.Component:
     """Go create or edit skills or achievements without losing the half-built CV.
 
     My profile opens in another tab, on the subsection of this list: going back to /new
@@ -1482,7 +1482,7 @@ def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler) -> rx.Com
             "justify_content": "space-between",
             "gap": "0.75rem",
             "flex_wrap": "wrap",
-            "margin_top": "0.75rem",
+            **style,
         },
     )
 
@@ -1529,7 +1529,8 @@ def other_sections_step() -> rx.Component:
         rx.el.div(
             panel(
                 legend("Skills", color=AMBER),
-                _profile_shortcut("skills", WizardState.update_skills),
+                # The panel puts no gap under its legend; on step 4 the column's gap spaces it.
+                _profile_shortcut("skills", WizardState.update_skills, margin_top="0.75rem"),
                 rx.el.div(
                     rx.foreach(WizardState.sorted_skills, _skill_row),
                     style={"margin_top": "0.5rem"},
