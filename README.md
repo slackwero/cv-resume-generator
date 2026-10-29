@@ -43,17 +43,20 @@ Debian / Ubuntu line above; for a native install, follow WeasyPrint's guide link
 
 ### Quick start
 
-For people who do not use a terminal.
+No terminal needed on macOS.
 
 1. On GitHub, click **Code → Download ZIP**, then unzip it.
 2. **macOS:** double-click `start.command`. The first time, macOS blocks it because it
-   was downloaded: right-click it, choose **Open**, then **Open** again. Only once.
+   was downloaded. On macOS 14 or earlier, right-click it, choose **Open**, then **Open**
+   again. On macOS 15 or later, go to **System Settings → Privacy & Security** and click
+   **Open Anyway**. Only once.
 3. **Linux:** open a terminal in the folder and run `./start.sh`. If it says
    "Permission denied", run `bash start.sh`.
-4. Say yes to what it offers to install. On macOS that is Homebrew, which asks for your
-   password, and Pango. On Linux it is Pango, curl and unzip, with your password. The
-   first start takes a few minutes (on a Mac without Homebrew, 10 to 20 more); the next
-   ones take seconds, with no questions.
+4. Say yes to what it offers to install. First uv, the tool that downloads Python and the
+   app's packages. Then, on macOS, Homebrew, which asks for your password, and Pango; on
+   Linux, Pango, curl and unzip, with your password. The first start takes a few minutes
+   (on a Mac without Homebrew, 10 to 20 more); the next ones take seconds, with no
+   questions.
 5. The browser opens on the app. If it does not, go to <http://localhost:3000>. To stop
    the app, close the window or press Ctrl+C. If something fails, `start.log` in the same
    folder says what happened.
