@@ -37,6 +37,7 @@ from cv_generator.rendering.styles import (
     line_height_label,
     line_height_step,
 )
+from cv_generator.services.achievements import AchievementOrigin, origin_of
 from cv_generator.services.generation import generate_cv, load_cv
 from cv_generator.services.photo import set_photo
 from cv_generator.services.profile import load_profile, load_sync_status, pending_fields
@@ -464,7 +465,7 @@ class WizardState(rx.State):
                     ),
                     # You wrote it, or it is a copy: LinkedIn never brought it. Text and not bool,
                     # like the rest of the row.
-                    "yours": "yes" if achievement.imported_value is None else "",
+                    "yours": "yes" if origin_of(achievement) is AchievementOrigin.YOURS else "",
                 }
                 for achievement in experience.achievements
             ]
@@ -511,10 +512,7 @@ class WizardState(rx.State):
         try:
             previous = load_cv(DATA_DIR, cv_id)
         except (FileNotFoundError, ValueError):
-            self.message = (
-                "The CV you wanted to clone was not found, so this one starts from scratch "
-                "with your whole profile checked."
-            )
+            self.message = "The CV you wanted to clone was not found, so this one starts from scratch, as a new CV."
             return
 
         recipe = previous.selection
@@ -959,6 +957,10 @@ class WizardState(rx.State):
 
     @rx.event
     def toggle_achievement(self, key: str, value: bool) -> None:
+        # A click that lands after "Refresh list" removed the achievement would put its mark
+        # back, and the "N of M" count would count it.
+        if key not in self.marked_achievements:
+            return
         self.marked_achievements[key] = value
         self._invalidate_preview()
 
