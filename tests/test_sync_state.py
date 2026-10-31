@@ -58,6 +58,20 @@ def test_the_upload_is_compared_against_the_profile_on_disk_then(
     assert analyzed_against[-1].personal.phone == "+34 600 000 000"
 
 
+def test_a_profile_that_cannot_be_read_at_upload_is_said_and_frees_the_box(
+    screen_data: Path, analyzed_against: list[MasterProfile]
+) -> None:
+    """Raising out of the upload would leave the box stuck on "analyzing"."""
+    state = new_state(SyncState)
+    run(SyncState.start, state)
+    (screen_data / "profile.json").write_text("{ not json", encoding="utf-8")
+
+    asyncio.run(state._analyze(EXPORT))
+
+    assert state.error_message.startswith("Your profile could not be read")
+    assert analyzed_against == []
+
+
 def test_apply_refuses_over_a_profile_changed_after_the_upload(screen: SyncState, screen_data: Path) -> None:
     save_profile(screen_data, _profile(phone="+34 600 000 000"))
 

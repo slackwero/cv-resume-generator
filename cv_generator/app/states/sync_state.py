@@ -182,7 +182,13 @@ class SyncState(rx.State):
         # Against the profile on disk now and not the one read when the screen opened: an
         # edit made in another tab in between belongs in this review. From here on, `apply`
         # refuses if the profile changes again.
-        self._compare_against(await asyncio.to_thread(load_profile, DATA_DIR))
+        try:
+            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
+        except (ValueError, OSError) as error:
+            # Returning, not raising: `process_file` frees the box once this is back.
+            self.error_message = f"Your profile could not be read, so nothing was compared: {error}"
+            return
+        self._compare_against(on_disk)
         # Without a profile it is compared against an empty one: everything imported comes out
         # as NEW and preselected, which is exactly what is needed the first time.
         profile = self._profile or empty_profile()
