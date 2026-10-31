@@ -20,6 +20,7 @@ from cv_generator.app.styles import (
     TEXT_FAINT,
     TEXT_MUTED,
     VISUALLY_HIDDEN,
+    error_notice,
     field_style,
     legend,
     note_text,
@@ -88,26 +89,6 @@ def _form_box(*children: rx.Component, **props: object) -> rx.Component:
     )
 
 
-def _notice(message: rx.Var, **style: str) -> rx.Component:
-    """An error, drawn like the notices of the other subsections of My profile."""
-    return rx.el.div(
-        rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-        rx.el.p(
-            message,
-            style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-        ),
-        style={
-            "display": "flex",
-            "gap": "0.75rem",
-            "align_items": "flex-start",
-            "border": f"1px solid {RULE_LINE}",
-            "border_left": f"2px solid {AMBER}",
-            "padding": "0.875rem 1rem",
-            **style,
-        },
-    )
-
-
 def _row_error(row: rx.Var) -> rx.Component:
     """The error of this row's action, where the eye already is: inside its open form, right
     above the buttons, or under the achievement for move and duplicate.
@@ -116,7 +97,7 @@ def _row_error(row: rx.Var) -> rx.Component:
     """
     return rx.cond(
         (ExperienceState.error != "") & (ExperienceState.error_at == row["key"]),
-        _notice(ExperienceState.error, margin_top="0.625rem"),
+        error_notice(ExperienceState.error, margin_top="0.625rem"),
         rx.fragment(),
     )
 
@@ -405,7 +386,7 @@ def _error_notice() -> rx.Component:
             rx.cond(
                 ExperienceState.error_at != "",
                 rx.el.span(ExperienceState.error, style=VISUALLY_HIDDEN),
-                _notice(ExperienceState.error, margin_bottom="0.5rem"),
+                error_notice(ExperienceState.error, margin_bottom="0.5rem"),
             ),
             rx.fragment(),
         ),

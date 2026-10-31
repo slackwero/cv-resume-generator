@@ -34,6 +34,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    error_notice,
     figure,
     legend,
     note_text,
@@ -271,25 +272,7 @@ def wizard_page() -> rx.Component:
     return page(
         "New CV",
         "Choose what goes into this CV and for which application. Your master profile is not touched.",
-        rx.cond(
-            WizardState.message != "",
-            rx.el.div(
-                rx.icon("circle_alert", size=16, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-                rx.el.p(
-                    WizardState.message,
-                    style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-                ),
-                style={
-                    "display": "flex",
-                    "gap": "0.75rem",
-                    "align_items": "flex-start",
-                    "border": f"1px solid {RULE_LINE}",
-                    "border_left": f"2px solid {AMBER}",
-                    "padding": "0.875rem 1rem",
-                },
-            ),
-            rx.fragment(),
-        ),
+        rx.cond(WizardState.message != "", error_notice(WizardState.message), rx.fragment()),
         _body(),
         _navigation(),
         strip=legend_strip(_step_map(), _strip_notices()),

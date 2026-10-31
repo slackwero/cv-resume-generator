@@ -32,6 +32,7 @@ from cv_generator.app.styles import (
     TEXT_FAINT,
     TEXT_MUTED,
     VISUALLY_HIDDEN,
+    error_notice,
     field_style,
     legend,
     note_text,
@@ -201,28 +202,9 @@ def _optional() -> rx.Component:
     )
 
 
-def _error_notice(message: rx.Var) -> rx.Component:
-    """The error of an action that saves right away, next to the block that triggers it."""
-    return rx.cond(
-        message != "",
-        rx.el.div(
-            rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-            rx.el.p(
-                message,
-                style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-            ),
-            style={
-                "display": "flex",
-                "gap": "0.75rem",
-                "align_items": "flex-start",
-                "border": f"1px solid {RULE_LINE}",
-                "border_left": f"2px solid {AMBER}",
-                "padding": "0.875rem 1rem",
-                "margin_top": "1rem",
-            },
-        ),
-        rx.fragment(),
-    )
+def _error_notice(message: rx.Var, margin_top: str = "1rem") -> rx.Component:
+    """The error of an action, next to the block that triggers it. Nothing while there is none."""
+    return rx.cond(message != "", error_notice(message, margin_top=margin_top), rx.fragment())
 
 
 def _portrait() -> rx.Component:
@@ -510,25 +492,7 @@ def _contact() -> rx.Component:
             ),
             rx.fragment(),
         ),
-        rx.cond(
-            ProfileState.error_message != "",
-            rx.el.div(
-                rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-                rx.el.p(
-                    ProfileState.error_message,
-                    style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-                ),
-                style={
-                    "display": "flex",
-                    "gap": "0.75rem",
-                    "align_items": "flex-start",
-                    "border": f"1px solid {RULE_LINE}",
-                    "border_left": f"2px solid {AMBER}",
-                    "padding": "0.875rem 1rem",
-                },
-            ),
-            rx.fragment(),
-        ),
+        _error_notice(ProfileState.error_message, margin_top="0"),
         style={"display": "flex", "flex_direction": "column", "gap": "1.5rem", "width": "100%"},
     )
 

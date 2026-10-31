@@ -29,6 +29,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    error_notice,
     legend,
     note_text,
     primary_button,
@@ -60,21 +61,6 @@ def _note(text: str, icon_name: str = "info") -> rx.Component:
             "border": f"1px solid {RULE_LINE}",
             "padding": "0.875rem 1rem",
             "width": "100%",
-        },
-    )
-
-
-def _error(text: rx.Var) -> rx.Component:
-    return rx.el.div(
-        rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-        rx.el.p(text, style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"}),
-        style={
-            "display": "flex",
-            "gap": "0.75rem",
-            "align_items": "flex-start",
-            "border": f"1px solid {RULE_LINE}",
-            "border_left": f"2px solid {AMBER}",
-            "padding": "0.875rem 1rem",
         },
     )
 
@@ -499,7 +485,7 @@ def sync_page() -> rx.Component:
         "Sync with LinkedIn",
         "Bring in what is on your LinkedIn profile and decide what goes in. Nothing is written until you approve it.",
         rx.cond(SyncState.notice != "", _note(SyncState.notice), rx.fragment()),
-        rx.cond(SyncState.error_message != "", _error(SyncState.error_message), rx.fragment()),
+        rx.cond(SyncState.error_message != "", error_notice(SyncState.error_message), rx.fragment()),
         rx.match(
             SyncState.phase,
             (PHASE_CHOOSE, _choose_step()),

@@ -31,6 +31,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    error_notice,
     field_style,
     figure,
     legend,
@@ -1662,26 +1663,7 @@ def final_actions() -> rx.Component:
             ),
             style={"display": "flex", "gap": "0.625rem", "align_items": "center", "flex_wrap": "wrap"},
         ),
-        rx.cond(
-            WizardState.action_error != "",
-            rx.el.div(
-                rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
-                rx.el.p(
-                    WizardState.action_error,
-                    style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"},
-                ),
-                style={
-                    "display": "flex",
-                    "gap": "0.75rem",
-                    "align_items": "flex-start",
-                    "border": f"1px solid {RULE_LINE}",
-                    "border_left": f"2px solid {AMBER}",
-                    "padding": "0.875rem 1rem",
-                    "width": "100%",
-                },
-            ),
-            rx.fragment(),
-        ),
+        rx.cond(WizardState.action_error != "", error_notice(WizardState.action_error, width="100%"), rx.fragment()),
         _result(),
         style={"display": "flex", "flex_direction": "column", "gap": "1rem", "width": "100%"},
     )

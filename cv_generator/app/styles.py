@@ -318,6 +318,24 @@ def status_mark(text: str | rx.Var, on: rx.Var | bool = False, **props: object) 
     return rx.el.span(text, style=style, **props)
 
 
+def error_notice(message: str | rx.Var, **style: object) -> rx.Component:
+    """An error, drawn the same on every screen: the amber circle, the message and an amber
+    rule on the left. `style` places it (margins, width)."""
+    return rx.el.div(
+        rx.icon("circle_alert", size=15, stroke_width=1.75, style={"color": AMBER, "flex": "0 0 auto"}),
+        rx.el.p(message, style={"font_stretch": "100%", "font_size": "0.875rem", "color": TEXT, "line_height": "1.5"}),
+        style={
+            "display": "flex",
+            "gap": "0.75rem",
+            "align_items": "flex-start",
+            "border": f"1px solid {RULE_LINE}",
+            "border_left": f"2px solid {AMBER}",
+            "padding": "0.875rem 1rem",
+            **style,
+        },
+    )
+
+
 def tag(label: str, color: str = AMBER, *, solid: bool = False) -> rx.Component:
     """Outlined in `color`, or a solid plate of it with the text in glass.
 
