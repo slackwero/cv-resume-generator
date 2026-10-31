@@ -106,6 +106,9 @@ class SyncState(rx.State):
     backup_path: str = ""
     undoing: bool = False
     undone: bool = False
+    # Undo refused because the profile changed after the sync. Pressing it again would
+    # only refuse again, so the button goes; the backup's name stays on screen.
+    undo_refused: bool = False
 
     @rx.event
     def start(self) -> None:
@@ -118,6 +121,7 @@ class SyncState(rx.State):
         self.accepted_items = {}
         self.backup_path = ""
         self.undone = False
+        self.undo_refused = False
         self._changes = []
         self._applied = None
 
@@ -175,6 +179,10 @@ class SyncState(rx.State):
         self.analyzing = False
 
     async def _analyze(self, path: Path) -> None:
+        # Against the profile on disk now and not the one read when the screen opened: an
+        # edit made in another tab in between belongs in this review. From here on, `apply`
+        # refuses if the profile changes again.
+        self._compare_against(await asyncio.to_thread(load_profile, DATA_DIR))
         # Without a profile it is compared against an empty one: everything imported comes out
         # as NEW and preselected, which is exactly what is needed the first time.
         profile = self._profile or empty_profile()
@@ -351,6 +359,7 @@ class SyncState(rx.State):
             f"{experiences} and {plural(achievements, 'achievement', 'achievements')}."
         )
         self.backup_path = result.backup.name if result.backup else ""
+        self.undo_refused = False
         self.phase = PHASE_APPLIED
         self.error_message = ""
         self.applying = False
@@ -377,6 +386,7 @@ class SyncState(rx.State):
                 self.error_message = (
                     "Your profile changed after this sync, so undoing it now would also undo those changes."
                 )
+                self.undo_refused = True
                 self.undoing = False
                 return
             profile = await asyncio.to_thread(restore_backup, DATA_DIR, self.backup_path)

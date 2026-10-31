@@ -305,69 +305,74 @@ def _undo_sync() -> rx.Component:
     return rx.el.div(
         note_text("Your previous profile was saved in data/" + SyncState.backup_path, color=TEXT_MUTED),
         rx.el.div(style={"flex": "1 1 auto"}),
-        rx.alert_dialog.root(
-            rx.alert_dialog.trigger(
-                secondary_button(
-                    rx.icon("undo_2", size=13, stroke_width=1.75),
-                    "Undo",
-                    disabled=SyncState.undoing,
+        # Once refused it would only refuse again: the profile changed after the sync.
+        rx.cond(SyncState.undo_refused, rx.fragment(), _undo_dialog()),
+        style={"display": "flex", "align_items": "center", "gap": "1rem", "flex_wrap": "wrap", "width": "100%"},
+    )
+
+
+def _undo_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.trigger(
+            secondary_button(
+                rx.icon("undo_2", size=13, stroke_width=1.75),
+                "Undo",
+                disabled=SyncState.undoing,
+                style={
+                    **touch_target(),
+                    "min_height": "2.25rem",
+                    "padding": "0 0.75rem",
+                    "font_size": "0.625rem",
+                },
+            ),
+        ),
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(
+                rx.el.span(
+                    "Undo this sync",
                     style={
-                        **touch_target(),
-                        "min_height": "2.25rem",
-                        "padding": "0 0.75rem",
-                        "font_size": "0.625rem",
+                        "font_stretch": "62%",
+                        "font_weight": "800",
+                        "font_size": "1.5rem",
+                        "text_transform": "uppercase",
+                        "letter_spacing": "-0.01em",
+                        "color": AMBER,
+                        "line_height": "1.05",
+                        "display": "block",
                     },
                 ),
             ),
-            rx.alert_dialog.content(
-                rx.alert_dialog.title(
-                    rx.el.span(
-                        "Undo this sync",
-                        style={
-                            "font_stretch": "62%",
-                            "font_weight": "800",
-                            "font_size": "1.5rem",
-                            "text_transform": "uppercase",
-                            "letter_spacing": "-0.01em",
-                            "color": AMBER,
-                            "line_height": "1.05",
-                            "display": "block",
-                        },
-                    ),
+            rx.alert_dialog.description(
+                rx.el.span(
+                    "Your profile will go back to how it was before applying these changes. What "
+                    "LinkedIn brought is discarded, and you can sync again whenever you want.",
+                    style={
+                        "font_stretch": "100%",
+                        "font_size": "0.875rem",
+                        "color": TEXT_FAINT,
+                        "line_height": "1.55",
+                        "display": "block",
+                        "margin_top": "0.75rem",
+                    },
                 ),
-                rx.alert_dialog.description(
-                    rx.el.span(
-                        "Your profile will go back to how it was before applying these changes. What "
-                        "LinkedIn brought is discarded, and you can sync again whenever you want.",
-                        style={
-                            "font_stretch": "100%",
-                            "font_size": "0.875rem",
-                            "color": TEXT_FAINT,
-                            "line_height": "1.55",
-                            "display": "block",
-                            "margin_top": "0.75rem",
-                        },
-                    ),
-                ),
-                rx.el.div(
-                    rx.el.div(style={"flex": "1 1 auto"}),
-                    rx.alert_dialog.cancel(
-                        secondary_button("Leave it as it is", style={**touch_target(), "min_height": "2.75rem"}),
-                    ),
-                    rx.alert_dialog.action(
-                        primary_button(
-                            "Undo",
-                            on_click=SyncState.undo,
-                            style={**touch_target(), "min_height": "2.75rem"},
-                        ),
-                    ),
-                    style={"display": "flex", "gap": "0.5rem", "margin_top": "1.5rem", "flex_wrap": "wrap"},
-                ),
-                max_width="32rem",
-                style={"background": GLASS_ETCHED, "border": f"1px solid {AMBER}", "border_radius": "0"},
             ),
+            rx.el.div(
+                rx.el.div(style={"flex": "1 1 auto"}),
+                rx.alert_dialog.cancel(
+                    secondary_button("Leave it as it is", style={**touch_target(), "min_height": "2.75rem"}),
+                ),
+                rx.alert_dialog.action(
+                    primary_button(
+                        "Undo",
+                        on_click=SyncState.undo,
+                        style={**touch_target(), "min_height": "2.75rem"},
+                    ),
+                ),
+                style={"display": "flex", "gap": "0.5rem", "margin_top": "1.5rem", "flex_wrap": "wrap"},
+            ),
+            max_width="32rem",
+            style={"background": GLASS_ETCHED, "border": f"1px solid {AMBER}", "border_radius": "0"},
         ),
-        style={"display": "flex", "align_items": "center", "gap": "1rem", "flex_wrap": "wrap", "width": "100%"},
     )
 
 
