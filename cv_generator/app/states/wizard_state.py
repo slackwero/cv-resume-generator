@@ -275,7 +275,7 @@ class WizardState(rx.State):
         self._prepare_sections()
         self._prepare_templates(profile)
 
-        clone_from = self.router.page.params.get("from", "")
+        clone_from = self.router.url.query_parameters.get("from", "")
         if clone_from:
             self._apply_previous_recipe(clone_from)
             # The thumbnails were drawn with the starting checks; the recipe may have changed them.

@@ -127,7 +127,7 @@ class ProfileState(rx.State):
     @rx.event
     def start(self) -> None:
         """Loads the profile from disk and fills the form with the personal details."""
-        self.section = requested_section(self.router.page.params.get("section", ""))
+        self.section = requested_section(self.router.url.query_parameters.get("section", ""))
         self.error_message = ""
         self.saved = False
 

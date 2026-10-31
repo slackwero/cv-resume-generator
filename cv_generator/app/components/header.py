@@ -70,7 +70,7 @@ ROOTLESS_PATHS = ("/new", "/profile", "/sync")
 
 
 def _current_path() -> rx.Var:
-    return rx.State.router.page.path
+    return rx.State.router.url.path
 
 
 def _mark() -> rx.Component:
@@ -113,11 +113,11 @@ def _target(path: str, label: str, icon_name: str) -> rx.Component:
         # The root is not detected by comparing, it is DEDUCED: it is the active one when no
         # other route is.
         #
-        # Comparing does not work because at the root `router.page.path` does not return "/",
-        # nor the empty string — both were tried in the browser and neither matched, while on
-        # /profile the same code does mark `aria-current="page"`. The exact value is a Reflex
-        # internal detail that is better not pinned here. Deducing it does not depend on that
-        # value and does not break if it changes between versions.
+        # Comparing did not work with the route pattern this read before (`router.page.path`):
+        # at the root it returned neither "/" nor the empty string — both were tried in the
+        # browser — while on /profile the same code did mark `aria-current="page"`. The exact
+        # value is a Reflex internal detail that is better not pinned here. Deducing it does
+        # not depend on that value and does not break if it changes between versions.
         active = current != ROOTLESS_PATHS[0]
         for other in ROOTLESS_PATHS[1:]:
             active = active & (current != other)
