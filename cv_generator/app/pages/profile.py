@@ -81,13 +81,19 @@ def _field(
             ),
             style={"display": "flex", "align_items": "center", "gap": "0.5rem", "margin_bottom": "0.375rem"},
         ),
-        rx.el.input(
-            id=field_id,
-            type=kind,
-            placeholder=placeholder,
-            value=value,
-            on_change=lambda new: ProfileState.update(field, new),
-            style={**field_style(), **touch_target()},
+        # Buffered: each key used to reach the server, and its echo rewrote the field while
+        # you typed on, dropping letters. It sends after a pause, on Enter and when you leave
+        # the field, which comes before a click on "Save changes"; while you type it ignores
+        # the echo.
+        rx.debounce_input(
+            rx.el.input(
+                id=field_id,
+                type=kind,
+                placeholder=placeholder,
+                value=value,
+                on_change=lambda new: ProfileState.update(field, new),
+                style={**field_style(), **touch_target()},
+            ),
         ),
         rx.cond(
             hint != "",

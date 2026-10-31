@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from cv_generator.app.pages.profile import _field
 from cv_generator.app.states.profile_state import ProfileState, requested_section
 from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.services.profile import load_profile, save_profile
@@ -96,3 +97,15 @@ def test_typing_the_saved_value_back_is_no_change(screen: ProfileState) -> None:
     run(ProfileState.update, screen, "phone", REQUIRED["phone"])
 
     assert not screen.has_unsaved_changes
+
+
+@pytest.mark.parametrize(("field", "kind"), [("phone", "tel"), ("email", "email"), ("birth_date", "date")])
+def test_a_contact_field_buffers_what_you_type(field: str, kind: str) -> None:
+    """Each key used to reach the server, and its echo rewrote the field while you typed on:
+    "+34 600 333 444" typed fast became "4". Buffered, the field sends what you typed after a
+    pause, on Enter and when you leave it, and ignores the echo while you are typing."""
+    rendered = str(_field(field, field, getattr(ProfileState, field), kind=kind).render())
+
+    assert "DebounceInput" in rendered
+    assert f'"profile-{field}"' in rendered
+    assert f'"{kind}"' in rendered
