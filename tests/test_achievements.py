@@ -3,6 +3,8 @@
 What the owner does by hand has to survive the next sync: that is tested in test_merge.py.
 """
 
+from collections.abc import Callable
+
 import pytest
 
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
@@ -146,13 +148,14 @@ def test_removing_one_of_yours_dismisses_nothing(profile: MasterProfile) -> None
     assert "achievement-llm" not in _ids(result)
 
 
-def test_removing_twice_the_same_linkedin_text_stores_it_once(profile: MasterProfile) -> None:
+@pytest.mark.parametrize(
+    "same_text",
+    ["Automated scanning in 120 pipelines.", "  automated  scanning in 120 PIPELINES. "],
+    ids=["written the same", "in another case and spacing"],
+)
+def test_removing_twice_the_same_linkedin_text_stores_it_once(profile: MasterProfile, same_text: str) -> None:
     profile.experiences[0].achievements.append(
-        Achievement(
-            id="achievement-scan-again",
-            text="Another wording.",
-            imported_value="Automated scanning in 120 pipelines.",
-        )
+        Achievement(id="achievement-scan-again", text="Another wording.", imported_value=same_text)
     )
 
     result = remove_achievement(profile, "exp-acme", "achievement-scan")
@@ -222,26 +225,32 @@ def test_no_operation_modifies_the_given_profile(profile: MasterProfile) -> None
     assert profile.model_dump() == before
 
 
-def test_unknown_ids_raise_a_clear_error(profile: MasterProfile) -> None:
-    by_job = [
-        lambda p, e: add_achievement(p, e, "Text."),
-        lambda p, e: edit_achievement(p, e, "achievement-scan", "Text."),
-        lambda p, e: restore_linkedin_text(p, e, "achievement-triage"),
-        lambda p, e: duplicate_achievement(p, e, "achievement-scan"),
-        lambda p, e: remove_achievement(p, e, "achievement-scan"),
-        lambda p, e: move_achievement(p, e, "achievement-scan", 1),
-    ]
-    for operation in by_job:
-        with pytest.raises(ValueError, match="job no longer exists"):
-            operation(profile, "exp-gone")
+# One case per operation, so a failure names the one that broke.
+BY_JOB = {
+    "add": lambda p, e: add_achievement(p, e, "Text."),
+    "edit": lambda p, e: edit_achievement(p, e, "achievement-scan", "Text."),
+    "restore": lambda p, e: restore_linkedin_text(p, e, "achievement-triage"),
+    "duplicate": lambda p, e: duplicate_achievement(p, e, "achievement-scan"),
+    "remove": lambda p, e: remove_achievement(p, e, "achievement-scan"),
+    "move": lambda p, e: move_achievement(p, e, "achievement-scan", 1),
+}
 
-    by_achievement = [
-        lambda p, a: edit_achievement(p, "exp-acme", a, "Text."),
-        lambda p, a: restore_linkedin_text(p, "exp-acme", a),
-        lambda p, a: duplicate_achievement(p, "exp-acme", a),
-        lambda p, a: remove_achievement(p, "exp-acme", a),
-        lambda p, a: move_achievement(p, "exp-acme", a, 1),
-    ]
-    for operation in by_achievement:
-        with pytest.raises(ValueError, match="achievement no longer exists"):
-            operation(profile, "achievement-gone")
+BY_ACHIEVEMENT = {
+    "edit": lambda p, a: edit_achievement(p, "exp-acme", a, "Text."),
+    "restore": lambda p, a: restore_linkedin_text(p, "exp-acme", a),
+    "duplicate": lambda p, a: duplicate_achievement(p, "exp-acme", a),
+    "remove": lambda p, a: remove_achievement(p, "exp-acme", a),
+    "move": lambda p, a: move_achievement(p, "exp-acme", a, 1),
+}
+
+
+@pytest.mark.parametrize("operation", BY_JOB.values(), ids=BY_JOB.keys())
+def test_an_unknown_job_raises_a_clear_error(profile: MasterProfile, operation: Callable) -> None:
+    with pytest.raises(ValueError, match="job no longer exists"):
+        operation(profile, "exp-gone")
+
+
+@pytest.mark.parametrize("operation", BY_ACHIEVEMENT.values(), ids=BY_ACHIEVEMENT.keys())
+def test_an_unknown_achievement_raises_a_clear_error(profile: MasterProfile, operation: Callable) -> None:
+    with pytest.raises(ValueError, match="achievement no longer exists"):
+        operation(profile, "achievement-gone")

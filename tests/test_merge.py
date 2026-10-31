@@ -328,6 +328,20 @@ def test_a_deleted_achievement_does_not_take_over_a_similar_one(empty_profile: M
     assert [(a.id, a.text) for a in after.experiences[0].achievements] == [(dast.id, DAST)]
 
 
+def test_a_rewrite_closer_to_a_kept_achievement_than_to_a_deleted_one_is_proposed(
+    empty_profile: MasterProfile,
+) -> None:
+    """The other side of the rule above: a deleted text only wins when it is strictly closer."""
+    profile = _sync(empty_profile, _draft_with(SAST, DAST))
+    job = profile.experiences[0]
+    sast, dast = job.achievements
+    profile = remove_achievement(profile, job.id, sast.id)
+
+    changed = _achievement_changes(compute_diff(profile, _draft_with("Cut DAST findings by 85%.")))
+
+    assert [(c.kind, c.target_id) for c in changed] == [(ChangeKind.MODIFIED, dast.id)]
+
+
 def test_a_slightly_changed_deleted_achievement_stays_deleted(empty_profile: MasterProfile) -> None:
     profile = _sync(empty_profile, _draft(SAST))
     job = profile.experiences[0]
