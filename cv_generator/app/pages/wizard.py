@@ -21,6 +21,7 @@ from cv_generator.app.components.wizard_steps import (
     sections_step,
     template_step,
 )
+from cv_generator.app.states.profile_state import section_url
 from cv_generator.app.states.wizard_state import WizardState
 from cv_generator.app.styles import (
     AMBER,
@@ -39,6 +40,7 @@ from cv_generator.app.styles import (
     primary_button,
     rail,
     secondary_button,
+    secondary_link,
     style_legend,
     touch_target,
 )
@@ -114,6 +116,10 @@ def _step_map() -> rx.Component:
     )
 
 
+# The two controls of the side strip, its full width.
+_STRIP_BUTTON = {"min_height": "2.25rem", "padding": "0 0.75rem", "font_size": "0.625rem", "width": "100%"}
+
+
 def _strip_notices() -> rx.Component:
     """What you need to know before generating, fixed at the side and not at the very top."""
     return rx.fragment(
@@ -127,7 +133,7 @@ def _strip_notices() -> rx.Component:
                 ),
                 rx.el.p(
                     "Your profile has no " + WizardState.pending_summary + ". Without it the CV "
-                    "prints 'PENDING' in its place.",
+                    "prints 'PENDING' in its place. My profile opens in another tab, so this CV is kept.",
                     style={
                         "font_stretch": "100%",
                         "font_size": "0.8125rem",
@@ -136,10 +142,32 @@ def _strip_notices() -> rx.Component:
                         "margin": "0.5rem 0 0.75rem",
                     },
                 ),
+                # A link and not a redirect: going back to /new would restart the wizard.
+                secondary_link(
+                    "Complete in My profile",
+                    rx.icon("external_link", size=13, stroke_width=1.75),
+                    href=section_url("contact"),
+                    target="_blank",
+                    rel="noopener",
+                    style={**_STRIP_BUTTON, "gap": "0.375rem"},
+                ),
                 secondary_button(
-                    "Complete",
-                    on_click=WizardState.go_to_profile,
-                    style={"min_height": "2.25rem", "padding": "0 0.75rem", "font_size": "0.625rem", "width": "100%"},
+                    rx.icon("refresh_cw", size=13, stroke_width=1.75),
+                    "Check again",
+                    type="button",
+                    on_click=WizardState.fetch_contact_details,
+                    style={**_STRIP_BUTTON, "gap": "0.375rem", "margin_top": "0.5rem"},
+                ),
+                # Always mounted: a `role="status"` that appears together with its text is not
+                # always announced.
+                note_text(
+                    WizardState.contact_notice,
+                    color=TEXT_FAINT,
+                    role="status",
+                    style={
+                        "display": "block",
+                        "margin_top": rx.cond(WizardState.contact_notice == "", "0", "0.625rem"),
+                    },
                 ),
                 style={
                     "border": f"1px solid {RULE_LINE}",

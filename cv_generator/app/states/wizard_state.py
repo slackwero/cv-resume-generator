@@ -40,7 +40,7 @@ from cv_generator.rendering.styles import (
 from cv_generator.services.achievements import AchievementOrigin, origin_of
 from cv_generator.services.generation import generate_cv, load_cv
 from cv_generator.services.photo import set_photo
-from cv_generator.services.profile import load_profile, load_sync_status, pending_fields
+from cv_generator.services.profile import load_profile, load_sync_status, pending_fields, with_personal
 from cv_generator.services.system import open_with_viewer
 from cv_generator.tailoring.keywords import analyze_coverage, mentioned_terms
 from cv_generator.tailoring.resolver import resolve_content
@@ -181,6 +181,8 @@ class WizardState(rx.State):
     # What answers "I uploaded it" when the profile has no photo yet: without this the click
     # changes nothing on screen and the button seems not to work.
     photo_notice: str = ""
+    # What "Check again" says when the contact details are still incomplete.
+    contact_notice: str = ""
 
     cv_name: str = ""
     target_role: str = ""
@@ -265,6 +267,7 @@ class WizardState(rx.State):
         self.has_photo = profile.personal.photo is not None
         self.include_photo = True
         self.photo_notice = ""
+        self.contact_notice = ""
 
         self._prepare_lists(profile)
         self._flatten_for_ui(profile)
@@ -725,10 +728,6 @@ class WizardState(rx.State):
         return rx.redirect("/")
 
     @rx.event
-    def go_to_profile(self) -> rx.event.EventSpec:
-        return rx.redirect("/profile")
-
-    @rx.event
     def open_the_pdf(self) -> None:
         """Opens the freshly generated PDF with the system viewer.
 
@@ -929,6 +928,35 @@ class WizardState(rx.State):
             return
 
         self._profile = set_photo(self._profile, photo)
+        self._refresh_template_views()
+        self._invalidate_preview()
+
+    @rx.event
+    def fetch_contact_details(self) -> None:
+        """Brings in the contact details you completed in My profile, opened in another tab.
+
+        Like the photo, only they are refreshed: going back to /new restarts the wizard.
+        The photo stays as this CV has it; "I uploaded it" is what brings that one. A
+        header profession you wrote for this CV stays too.
+        """
+        self.contact_notice = ""
+        profile = load_profile(DATA_DIR)
+        if profile is None or self._profile is None:
+            return
+
+        previous = self._profile.personal
+        self._profile = with_personal(self._profile, profile.personal)
+        self.pending = pending_fields(self._profile)
+        if self.header_profession == previous.profession:
+            self.header_profession = self._profile.personal.profession
+        if self.pending:
+            self.contact_notice = (
+                f"Your profile still has no {', '.join(self.pending)}. "
+                "Complete it in the My profile tab and press “Check again”."
+            )
+        # Same details, nothing to redraw or invalidate.
+        if self._profile.personal == previous:
+            return
         self._refresh_template_views()
         self._invalidate_preview()
 
