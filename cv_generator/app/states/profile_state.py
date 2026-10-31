@@ -8,6 +8,7 @@ subsection uses.
 """
 
 import asyncio
+import json
 from collections.abc import AsyncGenerator, Callable
 from datetime import date
 from typing import Any
@@ -55,6 +56,10 @@ def requested_section(value: str) -> str:
     return value if value in PROFILE_SECTIONS else "contact"
 
 
+def section_url(section: str) -> str:
+    return f"/profile?section={section}"
+
+
 def _without_placeholder(value: str | None) -> str:
     """A pending field is shown empty, not with the word 'PENDING' inside.
 
@@ -62,6 +67,26 @@ def _without_placeholder(value: str | None) -> str:
     delete it by hand before typing their data.
     """
     return "" if value in (None, PENDING_FIELD) else str(value)
+
+
+def _form_values(personal: PersonalInfo) -> dict[str, str]:
+    """The Contact form for these details, field by field."""
+    values = {field: _without_placeholder(getattr(personal, field)) for field in EDITABLE_FIELDS}
+    values["birth_date"] = personal.birth_date.isoformat() if personal.birth_date else ""
+    return values
+
+
+def kept_typing(typed: dict[str, str], loaded: dict[str, str], on_disk: dict[str, str]) -> dict[str, str]:
+    """The Contact form after reading the profile again.
+
+    A field you changed and did not save keeps what you typed; the rest shows what is on
+    disk now. `loaded` is what the form held when it was last read or saved; empty the
+    first time, when everything comes from disk.
+    """
+    return {
+        field: typed[field] if field in loaded and typed.get(field) != loaded[field] else value
+        for field, value in on_disk.items()
+    }
 
 
 class ProfileState(rx.State):
@@ -83,6 +108,10 @@ class ProfileState(rx.State):
     country: str = ""
     address: str = ""
     birth_date: str = ""
+    # What the fields held when they were last read from or saved to disk. `start` runs
+    # again on Back from another subsection; with this it keeps what you typed and did not
+    # save, and the form can say it is not saved yet.
+    loaded_fields: dict[str, str] = {}
 
     # The already processed photo, as a data URI: the same string that goes into the CV's `src`.
     photo: str = ""
@@ -108,24 +137,35 @@ class ProfileState(rx.State):
             return
 
         personal = profile.personal
-        self.first_name = _without_placeholder(personal.first_name)
-        self.last_name = _without_placeholder(personal.last_name)
-        self.profession = _without_placeholder(personal.profession)
-        self.phone = _without_placeholder(personal.phone)
-        self.email = _without_placeholder(personal.email)
-        self.website = _without_placeholder(personal.website)
-        self.country = _without_placeholder(personal.country)
-        self.address = _without_placeholder(personal.address)
-        self.birth_date = personal.birth_date.isoformat() if personal.birth_date else ""
+        on_disk = _form_values(personal)
+        self._fill(kept_typing(self._typed(), self.loaded_fields, on_disk))
+        self.loaded_fields = on_disk
         self.photo = personal.photo or ""
         self.uploading_photo = False
         self.photo_error = ""
         self.skills_error = ""
         self.skills = _skill_rows(profile)
 
+    def _typed(self) -> dict[str, str]:
+        return {field: getattr(self, field) for field in EDITABLE_FIELDS}
+
+    def _fill(self, values: dict[str, str]) -> None:
+        for field, value in values.items():
+            setattr(self, field, value)
+
     @rx.event
-    def show_section(self, name: str) -> None:
-        self.section = requested_section(name)
+    def show_section(self, name: str) -> rx.event.EventSpec | None:
+        """Opens a subsection and adds it to the address bar, as a new step of the history.
+
+        `history.pushState` and not `rx.redirect`: a redirect would run `start` on every
+        click. Back does run it, and the Contact form keeps what you typed (`kept_typing`).
+        The section is one of the allowlist, so the address is never the browser's text.
+        """
+        section = requested_section(name)
+        if section == self.section:
+            return None
+        self.section = section
+        return rx.call_script(f"window.history.pushState(null, '', {json.dumps(section_url(section))})")
 
     # ------------------------------------------------------------------ fields
 
@@ -147,6 +187,16 @@ class ProfileState(rx.State):
             "email": self.email,
         }
         return [FIELD_LABELS[field] for field, value in values.items() if not value.strip()]
+
+    # The dependencies are named because the body reads the fields by name.
+    @rx.var(deps=[*EDITABLE_FIELDS, "loaded_fields"], auto_deps=False)
+    def has_unsaved_changes(self) -> bool:
+        """Whether the form holds something typed and not saved yet.
+
+        It survives leaving the subsection and coming back, so the form says so instead of
+        passing for saved.
+        """
+        return any(value != self.loaded_fields.get(field, value) for field, value in self._typed().items())
 
     @rx.var
     def can_save(self) -> bool:
@@ -207,6 +257,9 @@ class ProfileState(rx.State):
             self.saving = False
             return
 
+        # The form shows what was written, trimmed, and that is what it now compares against.
+        self.loaded_fields = _form_values(updated.personal)
+        self._fill(self.loaded_fields)
         self.saved = True
         self.saving = False
 

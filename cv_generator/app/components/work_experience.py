@@ -19,6 +19,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    VISUALLY_HIDDEN,
     field_style,
     legend,
     note_text,
@@ -31,19 +32,6 @@ from cv_generator.app.styles import (
 
 # Compact on desktop, a finger's width on touch: a long list of jobs carries many of these.
 _SMALL_BUTTON = {"min_height": ["2.75rem", "2.75rem", "2rem"], "padding": "0 0.75rem"}
-
-# Read by screen readers and not drawn: the usual clip down to one pixel.
-_VISUALLY_HIDDEN = {
-    "position": "absolute",
-    "width": "1px",
-    "height": "1px",
-    "margin": "-1px",
-    "padding": "0",
-    "border": "0",
-    "overflow": "hidden",
-    "clip": "rect(0, 0, 0, 0)",
-    "white_space": "nowrap",
-}
 
 
 def _origin_tag(origin: rx.Var) -> rx.Component:
@@ -416,7 +404,7 @@ def _error_notice() -> rx.Component:
             ExperienceState.error != "",
             rx.cond(
                 ExperienceState.error_at != "",
-                rx.el.span(ExperienceState.error, style=_VISUALLY_HIDDEN),
+                rx.el.span(ExperienceState.error, style=VISUALLY_HIDDEN),
                 _notice(ExperienceState.error, margin_bottom="0.5rem"),
             ),
             rx.fragment(),

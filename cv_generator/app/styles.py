@@ -128,6 +128,20 @@ def prose(color: str = TEXT) -> dict:
 # --- Legend ----------------------------------------------------------------------
 
 
+# Read by screen readers and not drawn: the usual clip down to one pixel.
+VISUALLY_HIDDEN = {
+    "position": "absolute",
+    "width": "1px",
+    "height": "1px",
+    "margin": "-1px",
+    "padding": "0",
+    "border": "0",
+    "overflow": "hidden",
+    "clip": "rect(0, 0, 0, 0)",
+    "white_space": "nowrap",
+}
+
+
 def legend(text: str | rx.Var, color: str = TEXT_MUTED, **props: object) -> rx.Component:
     """A scheme label. For SHORT LABELS, not for sentences.
 

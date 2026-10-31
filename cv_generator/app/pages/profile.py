@@ -31,6 +31,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    VISUALLY_HIDDEN,
     field_style,
     legend,
     note_text,
@@ -484,6 +485,11 @@ def _contact() -> rx.Component:
                     style={"display": "flex", "align_items": "center", "gap": "0.5rem"},
                 ),
             ),
+            rx.cond(
+                ProfileState.has_unsaved_changes & ~ProfileState.saving,
+                note_text("You have changes that are not saved yet.", color=AMBER),
+                rx.fragment(),
+            ),
             style={
                 "display": "flex",
                 "align_items": "center",
@@ -527,12 +533,26 @@ def _contact() -> rx.Component:
     )
 
 
+def _unsaved_mark() -> rx.Component:
+    """The dot on Contact while it holds changes not saved, seen from any subsection."""
+    return rx.cond(
+        ProfileState.has_unsaved_changes,
+        rx.el.span(
+            rx.el.span("●", aria_hidden="true", style={"color": AMBER, "margin_left": "0.5rem"}),
+            rx.el.span(" (not saved)", style=VISUALLY_HIDDEN),
+            title="Changes not saved yet",
+        ),
+        rx.fragment(),
+    )
+
+
 def _section_item(name: str, label: str) -> rx.Component:
     """An entry of the side menu. The open one is marked like the wizard's current step:
     an amber rule on the left and an etched background, never the solid plate."""
     current = ProfileState.section == name
     return rx.el.button(
         label,
+        _unsaved_mark() if name == "contact" else rx.fragment(),
         type="button",
         on_click=ProfileState.show_section(name),
         aria_current=rx.cond(current, "true", ""),
