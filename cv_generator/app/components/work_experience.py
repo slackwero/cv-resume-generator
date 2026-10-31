@@ -48,8 +48,9 @@ def _origin_tag(origin: rx.Var) -> rx.Component:
 def _textarea(key: rx.Var, saved_text: rx.Var | str, **props: object) -> rx.Component:
     """No `value=`: the field governs itself and the text travels when the form is sent.
 
-    It also travels each time you leave the field, as a draft: the click that closes the
-    form arrives after it. It opens with that draft when there is one.
+    It also travels as a draft: when you leave the field, which arrives before the click
+    that closes the form, and half a second after you stop typing, for Back with a
+    gesture or a reload. It opens with that draft when there is one.
     """
     return rx.el.textarea(
         name="text",
@@ -57,6 +58,7 @@ def _textarea(key: rx.Var, saved_text: rx.Var | str, **props: object) -> rx.Comp
         auto_focus=True,
         default_value=rx.cond(ExperienceState.drafts.contains(key), ExperienceState.drafts[key], saved_text),
         on_blur=lambda text: ExperienceState.keep_draft(key, text),
+        on_change=lambda text: ExperienceState.keep_draft(key, text).debounce(500),
         style={**field_style(), "resize": "vertical", "line_height": "1.55"},
         **props,
     )

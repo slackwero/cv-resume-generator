@@ -135,6 +135,12 @@ def _focus(element_id: str) -> rx.event.EventSpec | None:
     )
 
 
+def _same_text(typed: str, saved: str) -> bool:
+    """Whether saving `typed` would leave `saved` as it is: saving trims it, and a textarea
+    turns the CRLF of an imported text into LF."""
+    return typed.replace("\r\n", "\n").strip() == saved.replace("\r\n", "\n").strip()
+
+
 def _ids_of(key: str) -> tuple[str, str]:
     """The job and achievement ids of a row key.
 
@@ -249,16 +255,18 @@ class ExperienceState(rx.State):
 
     @rx.event
     def keep_draft(self, key: str, text: str) -> None:
-        """What you typed, each time you leave the field.
+        """What you typed: when you leave the field, and a moment after you stop typing.
 
-        The browser leaves the field before it runs the click that takes you elsewhere,
-        so this arrives first. Typing the saved text back, or nothing in a new one, is
-        no draft.
+        Leaving the field arrives before the click that takes you elsewhere. The pause
+        covers what leaves no field behind: Back with a gesture, or a reload. That one
+        may land after Cancel or Save, so only the form still open takes it. Typing the
+        saved text back, or nothing in a new one, is no draft.
         """
+        open_form = self.editing_key if self.editing_key else f"{self.adding_to}|add"
         row = next((row for row in self.rows if row["key"] == key), None)
-        if row is None or row["row"] not in ("achievement", "add"):
+        if row is None or key != open_form:
             return
-        unchanged = text == row["text"] if row["row"] == "achievement" else not text.strip()
+        unchanged = _same_text(text, row["text"]) if row["row"] == "achievement" else not text.strip()
         if unchanged:
             self.drafts.pop(key, None)
         else:

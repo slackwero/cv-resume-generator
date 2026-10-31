@@ -76,23 +76,43 @@ def test_leaving_the_editor_for_another_achievement_keeps_what_you_typed(editor:
     assert editor.drafts == {SCAN: "Scanned 200 pipelines."}
 
 
-def test_folding_the_job_keeps_what_you_typed(editor: ExperienceState) -> None:
+def test_folding_the_job_keeps_the_form_and_what_you_typed(editor: ExperienceState) -> None:
+    """Unfolding shows the form again, opened with the draft."""
     run(ExperienceState.start_add, editor, "exp-north")
     run(ExperienceState.keep_draft, editor, ADD_NORTH, "Moved the pipelines to GitHub Actions.")
     run(ExperienceState.toggle_job, editor, "exp-north")
 
+    assert editor.adding_to == "exp-north"
     assert editor.drafts == {ADD_NORTH: "Moved the pipelines to GitHub Actions."}
 
 
 @pytest.mark.parametrize(
     ("key", "text"),
-    [(SCAN, "Automated scanning in 120 pipelines."), (ADD_NORTH, "   ")],
-    ids=["the saved text again", "an empty new one"],
+    [
+        (SCAN, "Automated scanning in 120 pipelines."),
+        # Saving trims it, and a textarea turns CRLF into LF: no change either.
+        (SCAN, "Automated scanning in 120 pipelines.  "),
+        (ADD_NORTH, "   "),
+    ],
+    ids=["the saved text again", "the saved text and a space", "an empty new one"],
 )
 def test_a_draft_that_changes_nothing_is_not_kept(editor: ExperienceState, key: str, text: str) -> None:
+    editor.editing_key, editor.adding_to = SCAN, ""
+    if key == ADD_NORTH:
+        editor.editing_key, editor.adding_to = "", "exp-north"
     editor.drafts = {key: "Something typed before."}
 
     run(ExperienceState.keep_draft, editor, key, text)
+
+    assert editor.drafts == {}
+
+
+def test_a_draft_that_arrives_after_its_form_closed_is_ignored(editor: ExperienceState) -> None:
+    """What is typed also travels a moment after the last key, and may land after Cancel or Save."""
+    run(ExperienceState.start_edit, editor, SCAN)
+    run(ExperienceState.cancel_edit, editor)
+
+    run(ExperienceState.keep_draft, editor, SCAN, "Scanned 200 pipelines.")
 
     assert editor.drafts == {}
 
@@ -189,10 +209,11 @@ def test_only_the_achievement_asked_about_is_deleted(editor: ExperienceState, sc
 
     assert len(_texts(screen_data)) == 3
 
-    run(ExperienceState.confirm_delete, editor, SCAN)
+    focus = run(ExperienceState.confirm_delete, editor, SCAN)
 
     assert len(_texts(screen_data)) == 2
     assert editor.confirming_key == ""
+    assert f"edit-{TRIAGE}" in str(focus)
 
 
 def test_a_second_click_on_save_does_nothing(editor: ExperienceState, screen_data: Path) -> None:
