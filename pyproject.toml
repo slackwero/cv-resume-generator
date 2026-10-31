@@ -25,6 +25,7 @@ addopts = "-q --strict-markers"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.16.0",
     "pypdf>=6.16.2",
     "pytest>=9.1.1",
     "ruff>=0.16.5",
