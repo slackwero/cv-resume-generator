@@ -33,13 +33,23 @@ def screen(screen_data: Path) -> ProfileState:
     return state
 
 
+def test_the_address_opens_its_section(screen_data: Path) -> None:
+    """A reload, a link from the wizard or Back: `start` reads the section from the address."""
+    save_profile(screen_data, MasterProfile(personal=PersonalInfo(**REQUIRED)))
+    state = new_state(ProfileState, "/profile?section=experience")
+
+    run(ProfileState.start, state)
+
+    assert state.section == "experience"
+
+
 def test_opening_a_section_adds_it_to_the_address_bar(screen: ProfileState) -> None:
     """A new step in the history, so Back returns to the subsection before."""
-    script = str(run(ProfileState.show_section, screen, "skills"))
+    event = str(run(ProfileState.show_section, screen, "skills"))
 
     assert screen.section == "skills"
-    assert "history.pushState" in script
-    assert "/profile?section=skills" in script
+    assert "_redirect" in event
+    assert "/profile?section=skills" in event
 
 
 def test_opening_the_open_section_adds_no_step(screen: ProfileState) -> None:

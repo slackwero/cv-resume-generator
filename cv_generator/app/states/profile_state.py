@@ -8,7 +8,6 @@ subsection uses.
 """
 
 import asyncio
-import json
 from collections.abc import AsyncGenerator, Callable
 from datetime import date
 from typing import Any
@@ -157,15 +156,17 @@ class ProfileState(rx.State):
     def show_section(self, name: str) -> rx.event.EventSpec | None:
         """Opens a subsection and adds it to the address bar, as a new step of the history.
 
-        `history.pushState` and not `rx.redirect`: a redirect would run `start` on every
-        click. Back does run it, and the Contact form keeps what you typed (`kept_typing`).
+        Through the router, with `rx.redirect`, and not with `history.pushState`: the router
+        does not see a pushState, and Back to an address it still took for the current one
+        ran nothing, leaving the address on one subsection and the screen on another. So
+        `start` runs on every click; the Contact form keeps what you typed (`kept_typing`).
         The section is one of the allowlist, so the address is never the browser's text.
         """
         section = requested_section(name)
         if section == self.section:
             return None
         self.section = section
-        return rx.call_script(f"window.history.pushState(null, '', {json.dumps(section_url(section))})")
+        return rx.redirect(section_url(section))
 
     # ------------------------------------------------------------------ fields
 
