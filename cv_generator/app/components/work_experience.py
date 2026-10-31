@@ -56,14 +56,29 @@ def _origin_tag(origin: rx.Var) -> rx.Component:
     )
 
 
-def _textarea(**props: object) -> rx.Component:
-    """No `value=`: the field governs itself and the text only travels when the form is sent."""
+def _textarea(key: rx.Var, saved_text: rx.Var | str, **props: object) -> rx.Component:
+    """No `value=`: the field governs itself and the text travels when the form is sent.
+
+    It also travels each time you leave the field, as a draft: the click that closes the
+    form arrives after it. It opens with that draft when there is one.
+    """
     return rx.el.textarea(
         name="text",
         rows="3",
         auto_focus=True,
+        default_value=rx.cond(ExperienceState.drafts.contains(key), ExperienceState.drafts[key], saved_text),
+        on_blur=lambda text: ExperienceState.keep_draft(key, text),
         style={**field_style(), "resize": "vertical", "line_height": "1.55"},
         **props,
+    )
+
+
+def _draft_note(key: rx.Var, text: str) -> rx.Component:
+    """Says that a closed form keeps something you typed and did not save."""
+    return rx.cond(
+        ExperienceState.drafts.contains(key),
+        note_text(text, color=AMBER, style={"display": "block", "margin_top": "0.375rem"}),
+        rx.fragment(),
     )
 
 
@@ -105,14 +120,14 @@ def _notice(message: rx.Var, **style: str) -> rx.Component:
     )
 
 
-def _form_error() -> rx.Component:
-    """The error of the open form, right above its buttons, where the eye already is.
+def _row_error(row: rx.Var) -> rx.Component:
+    """The error of this row's action, where the eye already is: inside its open form, right
+    above the buttons, or under the achievement for move and duplicate.
 
-    Only one form is open at a time, so it is this one's. It is not a live region:
-    `_error_notice` announces it, once.
+    It is not a live region: `_error_notice` announces it, once.
     """
     return rx.cond(
-        (ExperienceState.error != "") & ExperienceState.error_in_form,
+        (ExperienceState.error != "") & (ExperienceState.error_at == row["key"]),
         _notice(ExperienceState.error, margin_top="0.625rem"),
         rx.fragment(),
     )
@@ -180,10 +195,14 @@ def _job(row: rx.Var) -> rx.Component:
 # --- Achievement -----------------------------------------------------------------
 
 
-def _move_button(icon_name: str, label: str, offset: int, row: rx.Var, *, disabled: rx.Var) -> rx.Component:
-    """Disabled at the ends: an active arrow that does nothing reads as broken."""
+def _move_button(direction: str, label: str, offset: int, row: rx.Var, *, disabled: rx.Var) -> rx.Component:
+    """Disabled at the ends: an active arrow that does nothing reads as broken.
+
+    The id is what the keyboard comes back to after the move (`focus_after_move`).
+    """
     return secondary_button(
-        rx.icon(icon_name, size=13, stroke_width=1.75),
+        rx.icon(f"chevron_{direction}", size=13, stroke_width=1.75),
+        id=f"move-{direction}-" + row["key"],
         type="button",
         on_click=ExperienceState.move(row["key"], offset),
         disabled=disabled,
@@ -195,32 +214,59 @@ def _move_button(icon_name: str, label: str, offset: int, row: rx.Var, *, disabl
 
 def _confirmation(row: rx.Var) -> rx.Component:
     """Delete asks first, in place. What it says depends on where the achievement came from:
-    only a LinkedIn one is remembered so the sync does not offer it again."""
+    only a LinkedIn one is remembered so the sync does not offer it again.
+
+    The keyboard lands on Cancel, the answer that loses nothing, and the group is named
+    by its question, so a screen reader reads the question on the way in.
+    """
+    question = "confirm-" + row["key"]
     return rx.el.div(
         rx.el.p(
             "Delete this achievement? CVs you already generated keep it.",
             rx.cond(row["origin"] != "yours", " The LinkedIn sync will not offer it again.", ""),
+            id=question,
             style={"font_stretch": "100%", "font_size": "0.8125rem", "color": TEXT, "line_height": "1.5"},
         ),
-        _form_error(),
+        _row_error(row),
         rx.el.div(
             primary_button(
                 "Delete", type="button", on_click=ExperienceState.confirm_delete(row["key"]), style=_SMALL_BUTTON
             ),
-            secondary_button("Cancel", type="button", on_click=ExperienceState.cancel_delete, style=_SMALL_BUTTON),
+            secondary_button(
+                "Cancel",
+                type="button",
+                auto_focus=True,
+                on_click=ExperienceState.cancel_delete,
+                style=_SMALL_BUTTON,
+            ),
             style={"display": "flex", "gap": "0.5rem", "flex_wrap": "wrap", "margin_top": "0.5rem"},
         ),
+        role="group",
+        aria_labelledby=question,
         style={"border_left": f"2px solid {AMBER}", "padding": "0.25rem 0 0.25rem 0.75rem", "margin_top": "0.625rem"},
     )
 
 
 def _actions(row: rx.Var) -> rx.Component:
+    """The ids are what the keyboard comes back to when the editor or the question closes."""
     return rx.el.div(
-        secondary_button("Edit", type="button", on_click=ExperienceState.start_edit(row["key"]), style=_SMALL_BUTTON),
+        secondary_button(
+            "Edit",
+            id="edit-" + row["key"],
+            type="button",
+            on_click=ExperienceState.start_edit(row["key"]),
+            style=_SMALL_BUTTON,
+        ),
         secondary_button(
             "Duplicate", type="button", on_click=ExperienceState.duplicate(row["key"]), style=_SMALL_BUTTON
         ),
-        secondary_button("Delete", type="button", on_click=ExperienceState.ask_delete(row["key"]), style=_SMALL_BUTTON),
+        secondary_button(
+            "Delete",
+            id="delete-" + row["key"],
+            type="button",
+            on_click=ExperienceState.ask_delete(row["key"]),
+            style=_SMALL_BUTTON,
+        ),
         style={"display": "flex", "gap": "0.375rem", "flex_wrap": "wrap", "margin_left": "auto"},
     )
 
@@ -230,8 +276,8 @@ def _achievement(row: rx.Var) -> rx.Component:
     confirming = ExperienceState.confirming_key == row["key"]
     return rx.el.div(
         rx.el.div(
-            _move_button("chevron_up", "Move up", -1, row, disabled=row["first"] == "yes"),
-            _move_button("chevron_down", "Move down", 1, row, disabled=row["last"] == "yes"),
+            _move_button("up", "Move up", -1, row, disabled=row["first"] == "yes"),
+            _move_button("down", "Move down", 1, row, disabled=row["last"] == "yes"),
             style={"display": "flex", "flex_direction": "column", "gap": "0.25rem", "flex": "0 0 auto"},
         ),
         rx.el.div(
@@ -250,7 +296,8 @@ def _achievement(row: rx.Var) -> rx.Component:
                 ),
                 style={"display": "flex", "align_items": "baseline", "gap": "0.625rem"},
             ),
-            rx.cond(confirming, _confirmation(row), rx.fragment()),
+            _draft_note(row["key"], "You have an unsaved change here. Press Edit to finish it."),
+            rx.cond(confirming, _confirmation(row), _row_error(row)),
             # 12rem and not more: at 390px the text has to fit next to the arrows, and the
             # actions are what wraps to the next line.
             style={"flex": "1 1 12rem", "min_width": "0"},
@@ -274,11 +321,7 @@ def _editor(row: rx.Var) -> rx.Component:
     """
     return _form_box(
         rx.el.div(_origin_tag(row["origin"]), style={"display": "flex", "margin_bottom": "0.5rem"}),
-        _textarea(
-            default_value=row["text"],
-            aria_label="Achievement text",
-            key=row["key"],
-        ),
+        _textarea(row["key"], row["text"], aria_label="Achievement text"),
         rx.cond(
             row["linkedin_text"] != "",
             note_text(
@@ -287,7 +330,7 @@ def _editor(row: rx.Var) -> rx.Component:
             ),
             rx.fragment(),
         ),
-        _form_error(),
+        _row_error(row),
         _form_buttons(
             "Save",
             ExperienceState.cancel_edit,
@@ -314,18 +357,22 @@ def _add(row: rx.Var) -> rx.Component:
     return rx.cond(
         ExperienceState.adding_to == row["experience_id"],
         _form_box(
-            _textarea(placeholder="What did you do, and what came of it?", aria_label="New achievement"),
-            _form_error(),
+            _textarea(
+                row["key"], "", placeholder="What did you do, and what came of it?", aria_label="New achievement"
+            ),
+            _row_error(row),
             _form_buttons("Add", ExperienceState.cancel_add),
             on_submit=ExperienceState.add,
         ),
         rx.el.div(
             secondary_button(
                 "+ Add achievement",
+                id="add-" + row["experience_id"],
                 type="button",
                 on_click=ExperienceState.start_add(row["experience_id"]),
                 style=_SMALL_BUTTON,
             ),
+            _draft_note(row["key"], "You started a new achievement here. Press + Add achievement to finish it."),
             style={"padding": "0.5rem 0 0.5rem 1.5rem"},
         ),
     )
@@ -360,16 +407,15 @@ def _row(row: rx.Var) -> rx.Component:
 def _error_notice() -> rx.Component:
     """The list's only live region: it announces every error once, wherever it is drawn.
 
-    Above the list it draws the errors of the actions that have no form (move, duplicate)
-    and of a form whose row is gone. The error of an open form is drawn inside that form,
-    next to its buttons, so here it is only read out. It is not pinned to the bottom of
-    the window: there it covered the buttons of an editor opened near the bottom.
+    Above the list it only draws the error of a row that is gone. The rest are drawn at
+    their row (`_row_error`), so here they are only read out. It is not pinned to the
+    bottom of the window: there it covered the buttons of an editor opened near the bottom.
     """
     return rx.el.div(
         rx.cond(
             ExperienceState.error != "",
             rx.cond(
-                ExperienceState.error_in_form,
+                ExperienceState.error_at != "",
                 rx.el.span(ExperienceState.error, style=_VISUALLY_HIDDEN),
                 _notice(ExperienceState.error, margin_bottom="0.5rem"),
             ),

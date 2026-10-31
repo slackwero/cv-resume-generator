@@ -6,6 +6,7 @@ Every operation saves right away, like the skills.
 """
 
 import asyncio
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -87,17 +88,50 @@ def achievement_rows(profile: MasterProfile) -> list[dict[str, str]]:
     return rows
 
 
-def form_is_on_screen(rows: list[dict[str, str]], *, editing_key: str, adding_to: str, confirming_key: str) -> bool:
-    """Whether the open form still has its row in the list.
+def focus_after_delete(rows: list[dict[str, str]], key: str) -> str:
+    """Where the keyboard goes once an achievement is deleted, worked out from the rows before.
 
-    After "That achievement no longer exists" the row is gone, and so would be an error
-    shown inside its form.
+    To the achievement that takes its place, the one above when it was the last, and the
+    job's add button when it was the only one. Empty when the row is not listed.
     """
-    keys = {row["key"] for row in rows}
-    return (
-        (editing_key != "" and editing_key in keys)
-        or (confirming_key != "" and confirming_key in keys)
-        or (adding_to != "" and f"{adding_to}|add" in keys)
+    index = next((i for i, row in enumerate(rows) if row["key"] == key), None)
+    if index is None or rows[index]["row"] != "achievement":
+        return ""
+    # A job's achievements are always followed by its add row and preceded by its heading.
+    for neighbour in (rows[index + 1], rows[index - 1]):
+        if neighbour["row"] == "achievement":
+            return f"edit-{neighbour['key']}"
+    return f"add-{rows[index]['experience_id']}"
+
+
+def focus_after_move(rows: list[dict[str, str]], key: str, offset: int) -> str:
+    """The arrow to keep the keyboard on after a move, worked out from the rows after it.
+
+    The same arrow, so pressing it again keeps moving; the other one once the achievement
+    reached that end, because the first one is disabled there.
+    """
+    row = next((row for row in rows if row["key"] == key), None)
+    if row is None:
+        return ""
+    if row["first"] and row["last"]:
+        return f"edit-{key}"
+    at_the_end = row["last"] if offset == 1 else row["first"]
+    going_down = (offset == 1) != bool(at_the_end)
+    return f"move-{'down' if going_down else 'up'}-{key}"
+
+
+def _focus(element_id: str) -> rx.event.EventSpec | None:
+    """Puts the keyboard on a control once the screen has redrawn.
+
+    Closing a form or moving a row takes the focused button out of the page, and the
+    browser drops the focus to the top of it: a keyboard user would have to start over.
+    Two frames, because the change arrives before React draws it.
+    """
+    if not element_id:
+        return None
+    target = json.dumps(element_id)
+    return rx.call_script(
+        f"requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById({target})?.focus()))"
     )
 
 
@@ -124,18 +158,26 @@ class ExperienceState(rx.State):
     editing_key: str = ""
     adding_to: str = ""
     confirming_key: str = ""
+    # What you typed in a form and did not send, by row key: an achievement's, or a job's
+    # add row. Clicking another achievement or folding the job closes the form, not what
+    # you wrote in it; only Cancel throws it away.
+    drafts: dict[str, str] = {}
 
     error: str = ""
-    # Where the error shows: inside the open form when it came from that form, next to its
-    # buttons; above the list for the actions that have no form (move, duplicate) and for
-    # a form whose row is gone.
-    error_in_form: bool = False
+    # The row whose action failed, where the error shows: inside its open form, next to
+    # its buttons, or under it for move and duplicate. Empty when that row is gone, and
+    # the error shows above the list.
+    error_at: str = ""
 
     @rx.event
     def start(self) -> None:
-        """Loads the profile from disk with the first job open and the rest folded."""
+        """Loads the profile from disk.
+
+        The first time, the first job opens and the rest fold. After that, it runs again
+        on Back from another subsection and on a reload: what you folded stays folded.
+        """
         self._close_forms()
-        self.error = ""
+        self._clear_error()
 
         profile = load_profile(DATA_DIR)
         self.has_profile = profile is not None
@@ -144,28 +186,38 @@ class ExperienceState(rx.State):
             self.open_jobs = {}
             return
 
-        self.rows = achievement_rows(profile)
-        self.open_jobs = {experience.id: index == 0 for index, experience in enumerate(profile.experiences)}
+        first_visit = not self.open_jobs
+        self._show(profile)
+        if first_visit:
+            self.open_jobs = {experience.id: index == 0 for index, experience in enumerate(profile.experiences)}
 
     def _close_forms(self) -> None:
         self.editing_key = ""
         self.adding_to = ""
         self.confirming_key = ""
 
+    def _clear_error(self) -> None:
+        self.error = ""
+        self.error_at = ""
+
     def _show(self, profile: MasterProfile) -> None:
-        """Rebuilds the rows and keeps folded what was folded. A job new to this screen comes in folded."""
+        """Rebuilds the rows and keeps folded what was folded. A job new to this screen comes in folded.
+
+        The draft of a row that is gone goes with it.
+        """
         self.rows = achievement_rows(profile)
         self.open_jobs = {experience.id: self.open_jobs.get(experience.id, False) for experience in profile.experiences}
+        keys = {row["key"] for row in self.rows}
+        self.drafts = {key: text for key, text in self.drafts.items() if key in keys}
 
-    async def _change(self, operation: Callable[[MasterProfile], MasterProfile], *, from_form: bool) -> None:
-        """Applies an operation on the achievements and saves it right away.
+    async def _change(self, operation: Callable[[MasterProfile], MasterProfile], *, at: str) -> bool:
+        """Applies an operation on the achievements and saves it right away. Returns whether it saved.
 
         It starts from the profile on disk and not from the one loaded when the screen
         opened: if you synced in another tab in the meantime, saving the old one would
-        erase that. `from_form` says whether it was sent from the open form, where its
-        error then shows.
+        erase that. `at` is the row the action came from, where its error shows.
         """
-        self.error = ""
+        self._clear_error()
         on_disk: MasterProfile | None = None
         try:
             on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
@@ -179,16 +231,11 @@ class ExperienceState(rx.State):
             # no longer exists" it would keep offering the row that fails.
             if on_disk is not None:
                 self._show(on_disk)
-            self.error_in_form = from_form and form_is_on_screen(
-                self.rows,
-                editing_key=self.editing_key,
-                adding_to=self.adding_to,
-                confirming_key=self.confirming_key,
-            )
-            return
+            self.error_at = at if any(row["key"] == at for row in self.rows) else ""
+            return False
 
         self._show(updated)
-        self._close_forms()
+        return True
 
     # ------------------------------------------------------------------ jobs
 
@@ -198,108 +245,156 @@ class ExperienceState(rx.State):
         if experience_id in self.open_jobs:
             self.open_jobs[experience_id] = not self.open_jobs[experience_id]
 
+    # ---------------------------------------------------------------- drafts
+
+    @rx.event
+    def keep_draft(self, key: str, text: str) -> None:
+        """What you typed, each time you leave the field.
+
+        The browser leaves the field before it runs the click that takes you elsewhere,
+        so this arrives first. Typing the saved text back, or nothing in a new one, is
+        no draft.
+        """
+        row = next((row for row in self.rows if row["key"] == key), None)
+        if row is None or row["row"] not in ("achievement", "add"):
+            return
+        unchanged = text == row["text"] if row["row"] == "achievement" else not text.strip()
+        if unchanged:
+            self.drafts.pop(key, None)
+        else:
+            self.drafts[key] = text
+
     # ------------------------------------------------------------------ edit
 
     @rx.event
     def start_edit(self, key: str) -> None:
         self._close_forms()
-        self.error = ""
+        self._clear_error()
         self.editing_key = key
 
     @rx.event
-    def cancel_edit(self) -> None:
+    def cancel_edit(self) -> rx.event.EventSpec | None:
+        key = self.editing_key
         self.editing_key = ""
-        self.error = ""
+        self.drafts.pop(key, None)
+        self._clear_error()
+        return _focus(f"edit-{key}")
 
     @rx.event
-    async def save_edit(self, data: dict[str, Any]) -> None:
+    async def save_edit(self, data: dict[str, Any]) -> rx.event.EventSpec | None:
         """The achievement comes from `editing_key` and not from the form: Reflex compiles the
         `on_submit` outside the `foreach`, where the row does not exist."""
         # A second click on Save arrives once the first one closed the editor.
         if not self.editing_key:
-            return
-        experience_id, achievement_id = _ids_of(self.editing_key)
+            return None
+        key = self.editing_key
+        experience_id, achievement_id = _ids_of(key)
         text = str(data.get("text", ""))
-        await self._change(
+        saved = await self._change(
             lambda profile: achievement_operations.edit_achievement(profile, experience_id, achievement_id, text),
-            from_form=True,
+            at=key,
         )
+        return self._close_editor(key) if saved else None
 
     @rx.event
-    async def restore(self, key: str) -> None:
+    async def restore(self, key: str) -> rx.event.EventSpec | None:
+        # The button lives in the open editor, which closes with LinkedIn's text back.
         experience_id, achievement_id = _ids_of(key)
-        await self._change(
+        saved = await self._change(
             lambda profile: achievement_operations.restore_linkedin_text(profile, experience_id, achievement_id),
-            # The button lives in the open editor.
-            from_form=True,
+            at=key,
         )
+        return self._close_editor(key) if saved else None
+
+    def _close_editor(self, key: str) -> rx.event.EventSpec | None:
+        self.editing_key = ""
+        self.drafts.pop(key, None)
+        return _focus(f"edit-{key}")
 
     # ------------------------------------------------------- duplicate and move
 
     @rx.event
     async def duplicate(self, key: str) -> None:
+        # An open form stays open: the copy goes in below the original, away from it.
         experience_id, achievement_id = _ids_of(key)
         await self._change(
             lambda profile: achievement_operations.duplicate_achievement(profile, experience_id, achievement_id),
-            from_form=False,
+            at=key,
         )
 
     @rx.event
-    async def move(self, key: str, offset: int) -> None:
+    async def move(self, key: str, offset: int) -> rx.event.EventSpec | None:
         # The buttons only send one step; anything else did not come from them.
         if offset not in (-1, 1):
-            return
+            return None
         experience_id, achievement_id = _ids_of(key)
-        await self._change(
+        moved = await self._change(
             lambda profile: achievement_operations.move_achievement(profile, experience_id, achievement_id, offset),
-            from_form=False,
+            at=key,
         )
+        return _focus(focus_after_move(self.rows, key, offset)) if moved else None
 
     # ------------------------------------------------------------------ delete
 
     @rx.event
     def ask_delete(self, key: str) -> None:
         self._close_forms()
-        self.error = ""
+        self._clear_error()
         self.confirming_key = key
 
     @rx.event
-    def cancel_delete(self) -> None:
+    def cancel_delete(self) -> rx.event.EventSpec | None:
+        key = self.confirming_key
         self.confirming_key = ""
-        self.error = ""
+        self._clear_error()
+        return _focus(f"delete-{key}")
 
     @rx.event
-    async def confirm_delete(self, key: str) -> None:
+    async def confirm_delete(self, key: str) -> rx.event.EventSpec | None:
         """Only the achievement whose question is open: the confirmation is required here
         and not only on screen, and a second click on Delete arrives once it is gone."""
         if not key or key != self.confirming_key:
-            return
+            return None
+        target = focus_after_delete(self.rows, key)
         experience_id, achievement_id = _ids_of(key)
-        await self._change(
+        deleted = await self._change(
             lambda profile: achievement_operations.remove_achievement(profile, experience_id, achievement_id),
-            from_form=True,
+            at=key,
         )
+        if not deleted:
+            return None
+        self.confirming_key = ""
+        return _focus(target)
 
     # --------------------------------------------------------------------- add
 
     @rx.event
     def start_add(self, experience_id: str) -> None:
         self._close_forms()
-        self.error = ""
+        self._clear_error()
         self.adding_to = experience_id
 
     @rx.event
-    def cancel_add(self) -> None:
+    def cancel_add(self) -> rx.event.EventSpec | None:
+        experience_id = self.adding_to
         self.adding_to = ""
-        self.error = ""
+        self.drafts.pop(f"{experience_id}|add", None)
+        self._clear_error()
+        return _focus(f"add-{experience_id}")
 
     @rx.event
-    async def add(self, data: dict[str, Any]) -> None:
+    async def add(self, data: dict[str, Any]) -> rx.event.EventSpec | None:
         """The job comes from `adding_to`, for the same reason as in `save_edit`."""
         if not self.adding_to:
-            return
+            return None
         experience_id = self.adding_to
         text = str(data.get("text", ""))
-        await self._change(
-            lambda profile: achievement_operations.add_achievement(profile, experience_id, text), from_form=True
+        added = await self._change(
+            lambda profile: achievement_operations.add_achievement(profile, experience_id, text),
+            at=f"{experience_id}|add",
         )
+        if not added:
+            return None
+        self.adding_to = ""
+        self.drafts.pop(f"{experience_id}|add", None)
+        return _focus(f"add-{experience_id}")
