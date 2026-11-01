@@ -1,3 +1,4 @@
+import errno
 from pathlib import Path
 
 import pytest
@@ -39,3 +40,32 @@ def test_a_file_that_is_gone_keeps_its_own_message(monkeypatch: pytest.MonkeyPat
     state = _open_failing_with(FileNotFoundError("gone"), monkeypatch, tmp_path)
 
     assert "cv.pdf is no longer in output/" in state.message
+
+
+def _regenerate_failing_with(error: Exception, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> HomeState:
+    def fail(data_dir: Path, output_dir: Path, cv_id: str) -> Path:
+        raise error
+
+    monkeypatch.setattr(home_state, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(home_state, "rewrite_pdf", fail)
+    state = new_state(HomeState)
+    run(HomeState.regenerate, state, "abc")
+    return state
+
+
+def test_regenerating_a_pdf_open_in_a_viewer_says_to_close_it(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    locked = PermissionError(errno.EACCES, "Permission denied", str(tmp_path / "cv.pdf"))
+
+    state = _regenerate_failing_with(locked, monkeypatch, tmp_path)
+
+    assert state.message.startswith("The PDF could not be rebuilt:")
+    assert state.message.endswith("If the PDF is open in a viewer, close it and try again.")
+    assert state.regenerating == ""
+
+
+def test_regenerating_with_a_full_disk_gets_no_viewer_hint(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    full = OSError(errno.ENOSPC, "No space left on device", str(tmp_path / "cv.pdf"))
+
+    state = _regenerate_failing_with(full, monkeypatch, tmp_path)
+
+    assert state.message == "The PDF could not be rebuilt: the disk is full"

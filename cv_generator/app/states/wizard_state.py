@@ -13,7 +13,7 @@ from cv_generator.app.config import (
     DEFAULT_TEMPLATE,
     OUTPUT_DIR,
 )
-from cv_generator.app.errors import readable
+from cv_generator.app.errors import pdf_not_written, readable
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
@@ -1282,10 +1282,9 @@ class WizardState(rx.State):
             self.generating = False
             return
         except OSError as error:
-            self.action_error = (
-                f"The PDF could not be written to output/: {readable(error)}. "
-                "Check that the folder exists and is writable."
-            )
+            # A locked file already comes with its own way out; for the rest the folder is the suspect.
+            advice = "" if isinstance(error, PermissionError) else ". Check that the folder exists and is writable."
+            self.action_error = f"The PDF could not be written to output/: {pdf_not_written(error)}{advice}"
             self.generating = False
             return
         except (KeyError, ValueError) as error:

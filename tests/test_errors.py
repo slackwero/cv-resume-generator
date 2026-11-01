@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from cv_generator.app.errors import as_sentence, readable
+from cv_generator.app.errors import as_sentence, pdf_not_written, readable
 
 
 def test_a_message_written_for_the_screen_goes_as_it_is() -> None:
@@ -52,3 +52,16 @@ def test_a_disk_error_on_its_own_is_a_sentence() -> None:
     """For the notices that show only the error, with no "could not be saved:" before it."""
     assert as_sentence(OSError(errno.ENOSPC, "No space left on device")) == "Nothing was saved: the disk is full."
     assert as_sentence(ValueError("The achievement cannot be empty.")) == "The achievement cannot be empty."
+
+
+def test_a_pdf_that_is_locked_tells_the_owner_to_close_the_viewer() -> None:
+    error = PermissionError(errno.EACCES, "Permission denied", "/Users/someone/cv-generator/output/cv.pdf")
+
+    assert pdf_not_written(error).endswith("If the PDF is open in a viewer, close it and try again.")
+    assert "output" in pdf_not_written(error)
+
+
+def test_other_errors_writing_a_pdf_get_no_viewer_hint() -> None:
+    error = OSError(errno.ENOSPC, "No space left on device", "/Users/someone/cv-generator/output/cv.pdf")
+
+    assert pdf_not_written(error) == "the disk is full"

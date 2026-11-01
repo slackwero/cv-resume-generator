@@ -42,3 +42,14 @@ def as_sentence(error: BaseException) -> str:
     if isinstance(error, OSError) and error.errno is not None:
         return f"Nothing was saved: {readable(error)}."
     return str(error)
+
+
+def pdf_not_written(error: OSError) -> str:
+    """Why a PDF could not be written, for the message after "…could not be written: ".
+
+    On Windows a viewer that has the PDF open locks it, and writing it again fails with a
+    permission error that names only the folder. That case gets the way out.
+    """
+    if isinstance(error, PermissionError):
+        return f"{readable(error)}. If the PDF is open in a viewer, close it and try again."
+    return readable(error)
