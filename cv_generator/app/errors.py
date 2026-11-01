@@ -53,3 +53,17 @@ def pdf_not_written(error: OSError) -> str:
     if isinstance(error, PermissionError):
         return f"{readable(error)}. If the PDF is open in a viewer, close it and try again."
     return readable(error)
+
+
+def viewer_not_opened(error: BaseException, file_name: str) -> str:
+    """Why the system viewer could not start, with the way out: open the file by hand.
+
+    A viewer program that is not installed (no xdg-open) would read as "the system said:
+    no such file or directory" next to a PDF that exists, so that case is said plainly.
+    """
+    cause = error.__cause__
+    if isinstance(cause, FileNotFoundError):
+        why = "no program to open PDFs was found"
+    else:
+        why = readable(cause if cause is not None else error)
+    return f"Your PDF viewer could not be opened: {why}. Open {file_name} from the output/ folder yourself."

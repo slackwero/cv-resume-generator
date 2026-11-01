@@ -69,3 +69,18 @@ def test_regenerating_with_a_full_disk_gets_no_viewer_hint(monkeypatch: pytest.M
     state = _regenerate_failing_with(full, monkeypatch, tmp_path)
 
     assert state.message == "The PDF could not be rebuilt: the disk is full"
+
+
+def test_a_missing_viewer_program_is_not_reported_as_a_system_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    try:
+        raise FileNotFoundError(2, "No such file or directory", "xdg-open")
+    except FileNotFoundError as cause:
+        unavailable = ViewerUnavailable("no viewer")
+        unavailable.__cause__ = cause
+
+    state = _open_failing_with(unavailable, monkeypatch, tmp_path)
+
+    assert "no program to open PDFs was found" in state.message
+    assert "the system said" not in state.message

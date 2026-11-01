@@ -13,7 +13,7 @@ from cv_generator.app.config import (
     DEFAULT_TEMPLATE,
     OUTPUT_DIR,
 )
-from cv_generator.app.errors import pdf_not_written, readable
+from cv_generator.app.errors import readable, viewer_not_opened
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
@@ -42,7 +42,7 @@ from cv_generator.services.achievements import AchievementOrigin, origin_of
 from cv_generator.services.generation import generate_cv, load_cv
 from cv_generator.services.photo import set_photo
 from cv_generator.services.profile import load_profile, load_sync_status, pending_fields, with_personal
-from cv_generator.services.system import open_with_viewer
+from cv_generator.services.system import ViewerUnavailable, open_with_viewer
 from cv_generator.tailoring.keywords import analyze_coverage, mentioned_terms
 from cv_generator.tailoring.resolver import resolve_content
 
@@ -737,6 +737,8 @@ class WizardState(rx.State):
         """
         try:
             open_with_viewer(Path(self.generated_cv), OUTPUT_DIR)
+        except ViewerUnavailable as error:
+            self.action_error = viewer_not_opened(error, Path(self.generated_cv).name)
         except FileNotFoundError:
             self.action_error = "The PDF is no longer in output/. Generate it again."
         except ValueError:
@@ -1282,9 +1284,11 @@ class WizardState(rx.State):
             self.generating = False
             return
         except OSError as error:
-            # A locked file already comes with its own way out; for the rest the folder is the suspect.
-            advice = "" if isinstance(error, PermissionError) else ". Check that the folder exists and is writable."
-            self.action_error = f"The PDF could not be written to output/: {pdf_not_written(error)}{advice}"
+            # The name is always fresh, so no viewer can hold it; the folder is the suspect.
+            self.action_error = (
+                f"The PDF could not be written to output/: {readable(error)}. "
+                "Check that the folder exists and is writable."
+            )
             self.generating = False
             return
         except (KeyError, ValueError) as error:

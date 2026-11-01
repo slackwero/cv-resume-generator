@@ -8,7 +8,7 @@ from pathlib import Path
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
-from cv_generator.app.errors import pdf_not_written, readable
+from cv_generator.app.errors import pdf_not_written, readable, viewer_not_opened
 from cv_generator.rendering.i18n import load_language
 from cv_generator.services.generation import rewrite_pdf
 from cv_generator.services.profile import (
@@ -279,10 +279,7 @@ class HomeState(rx.State):
         try:
             open_with_viewer(Path(path), OUTPUT_DIR)
         except ViewerUnavailable as error:
-            self.message = (
-                f"Your PDF viewer could not be opened: {readable(error.__cause__)}. "
-                f"Open {Path(path).name} from the output/ folder yourself."
-            )
+            self.message = viewer_not_opened(error, Path(path).name)
         except FileNotFoundError:
             self.message = (
                 f"The file {Path(path).name} is no longer in output/. "
