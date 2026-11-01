@@ -80,6 +80,9 @@ Regenerate cannot replace it and says to close it and try again.
   Close the viewer and click Regenerate again: it works.
 - [ ] **Clone and archive.** Clone the CV: a new one appears with the same content.
   Archive one: it leaves the active list and keeps its date and reason.
+- [ ] **Rename.** Click Rename on a CV, change the name and press Enter: the list shows
+  the new name and the PDF in `output/` is unchanged. Rename again and press Escape: the
+  name stays as it was.
 - [ ] **Stop with Ctrl+C.** Start with `start.bat`, press Ctrl+C in its window. The app
   stops and the port is free: `netstat -ano | findstr :3000` prints nothing.
 - [ ] **Stop by closing the window.** Start with `start.bat` and close the window. The

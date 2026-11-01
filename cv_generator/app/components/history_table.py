@@ -140,6 +140,49 @@ def _free_rail(number: rx.Var) -> rx.Component:
     )
 
 
+def _name(cv: rx.Var, archived: rx.Var) -> rx.Component:
+    """The name the CV is listed under, or the field to change it.
+
+    Enter or leaving the field saves, Escape leaves it as it was. Like the skills in My
+    profile, without `value=` the field governs itself and writes once, when you are done.
+    Only the name changes: the PDF does not print it.
+    """
+    return rx.cond(
+        HomeState.renaming == cv["cv_id"],
+        rx.el.form(
+            # The id travels in a hidden field: Reflex compiles the `on_submit` outside the
+            # `foreach`, and a reference to `cv` there blows up in the browser when pressing Enter.
+            rx.el.input(type="hidden", name="cv_id", value=cv["cv_id"]),
+            rx.el.input(
+                name="name",
+                default_value=cv["name"],
+                auto_focus=True,
+                on_blur=lambda name: HomeState.rename(cv["cv_id"], name),
+                on_key_down=lambda key: HomeState.escape_rename(key),
+                aria_label="Name of this CV",
+                style={
+                    **field_style(),
+                    "font_weight": "600",
+                    "min_height": "2.25rem",
+                    "max_width": "38rem",
+                },
+            ),
+            on_submit=HomeState.rename_from_form,
+        ),
+        rx.el.span(
+            cv["name"],
+            style={
+                "font_stretch": "85%",
+                "font_weight": "600",
+                "font_size": "1rem",
+                "color": rx.cond(archived, TEXT_MUTED, TEXT),
+                "line_height": "1.25",
+                "display": "block",
+            },
+        ),
+    )
+
+
 def _row(cv: rx.Var) -> rx.Component:
     archived = cv["archived"] != ""
     # The number comes from the state, assigned once over the full list by age. It is not
@@ -189,6 +232,15 @@ def _row(cv: rx.Var) -> rx.Component:
             title="Starts a new CV from this one",
         ),
         _action(
+            "pencil",
+            "Rename",
+            # Enter and Escape bring the keyboard back here when the field closes.
+            id="rename-" + cv["cv_id"],
+            on_click=HomeState.start_rename(cv["cv_id"]),
+            disabled=HomeState.renaming == cv["cv_id"],
+            title="Changes the name this CV is listed under. The PDF is not touched.",
+        ),
+        _action(
             rx.cond(archived, "archive_restore", "archive"),
             rx.cond(archived, "Restore", "Archive"),
             on_click=HomeState.archive(cv["cv_id"], ~archived),
@@ -209,17 +261,7 @@ def _row(cv: rx.Var) -> rx.Component:
             # The anchor. Tabular and condensed, like every figure compared vertically.
             rx.el.span(number, style=figure("1.5rem", rx.cond(archived, TEXT_MUTED, AMBER))),
             rx.el.div(
-                rx.el.span(
-                    cv["name"],
-                    style={
-                        "font_stretch": "85%",
-                        "font_weight": "600",
-                        "font_size": "1rem",
-                        "color": rx.cond(archived, TEXT_MUTED, TEXT),
-                        "line_height": "1.25",
-                        "display": "block",
-                    },
-                ),
+                _name(cv, archived),
                 rx.el.span(
                     cv["role"],
                     style={

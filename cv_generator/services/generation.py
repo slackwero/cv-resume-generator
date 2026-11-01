@@ -11,7 +11,7 @@ from cv_generator.models.cv import GeneratedCV, JobPosting, Selection
 from cv_generator.models.profile import MasterProfile
 from cv_generator.rendering.filename import build_filename, resolve_available_path
 from cv_generator.rendering.renderer import load_meta, render_pdf
-from cv_generator.storage.history import cvs_dir, register_cv
+from cv_generator.storage.history import cvs_dir, register_cv, rename_entry
 from cv_generator.storage.repo import read_json, save_json
 from cv_generator.tailoring.resolver import resolve_content
 
@@ -26,9 +26,31 @@ def load_cv(data_dir: Path, cv_id: str) -> GeneratedCV:
 
 
 def save_cv(data_dir: Path, cv: GeneratedCV) -> None:
-    """Writes the CV snapshot. Once written, it is never modified."""
+    """Writes the CV snapshot. Once written, what it says is never modified; only its name can change."""
     cvs_dir(data_dir).mkdir(parents=True, exist_ok=True)
     save_json(_snapshot_path(data_dir, cv.cv_id), cv.model_dump(mode="json"))
+
+
+def rename_cv(data_dir: Path, cv_id: str, name: str) -> GeneratedCV:
+    """Changes the name a CV is listed under, and nothing else.
+
+    The name is how you find it in the history; the PDF does not print it, so what you
+    sent stays as it was and Regenerate still produces the same document. It goes to the
+    snapshot first, which is where the list is rebuilt from, and then to the list.
+
+    Raises:
+        ValueError: if the name is blank.
+        FileNotFoundError: if the CV has no snapshot.
+        KeyError: if the CV is not in the list.
+    """
+    new_name = name.strip()
+    if not new_name:
+        raise ValueError("a CV needs a name")
+
+    cv = load_cv(data_dir, cv_id).model_copy(update={"cv_name": new_name})
+    save_cv(data_dir, cv)
+    rename_entry(data_dir, cv_id, new_name)
+    return cv
 
 
 def generate_cv(

@@ -1,12 +1,17 @@
 import errno
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from cv_generator.app.states import home_state
 from cv_generator.app.states.home_state import HomeState
+from cv_generator.models.cv import CVContent, GeneratedCV, Selection
+from cv_generator.services.generation import load_cv, save_cv
 from cv_generator.services.system import ViewerUnavailable
+from cv_generator.storage.history import register_cv
 from tests.screens import new_state, run
+from tests.test_models_personal import REQUIRED
 
 
 def _open_failing_with(error: Exception, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> HomeState:
@@ -84,3 +89,109 @@ def test_a_missing_viewer_program_is_not_reported_as_a_system_error(
 
     assert "no program to open PDFs was found" in state.message
     assert "the system said" not in state.message
+
+
+def _home_with_a_cv(data_dir: Path) -> tuple[HomeState, str]:
+    cv = GeneratedCV(
+        created=datetime(2026, 10, 27, 9, 0),  # noqa: DTZ001
+        cv_name="Northwind",
+        target_role="DevSecOps Engineer",
+        language="en",
+        template="sidebar",
+        pdf_file=str(data_dir / "northwind.pdf"),
+        selection=Selection(),
+        content=CVContent(personal=REQUIRED),
+    )
+    save_cv(data_dir, cv)
+    register_cv(data_dir, cv)
+    state = new_state(HomeState)
+    run(HomeState.load, state)
+    run(HomeState.start_rename, state, cv.cv_id)
+    return state, cv.cv_id
+
+
+def test_leaving_the_name_field_saves_the_new_name(screen_data: Path) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    run(HomeState.rename, state, cv_id, "  Northwind, platform team ")
+
+    assert state.renaming == ""
+    assert state.history[0]["name"] == "Northwind, platform team"
+    assert load_cv(screen_data, cv_id).cv_name == "Northwind, platform team"
+
+
+def test_enter_saves_the_new_name(screen_data: Path) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    run(HomeState.rename_from_form, state, {"cv_id": cv_id, "name": "Northwind, platform team"})
+
+    assert state.renaming == ""
+    assert state.history[0]["name"] == "Northwind, platform team"
+
+
+def test_escape_closes_the_field_and_a_late_blur_saves_nothing(screen_data: Path) -> None:
+    """Closing the field can still fire its blur with what was typed; that text was cancelled."""
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    run(HomeState.escape_rename, state, "Escape")
+    run(HomeState.rename, state, cv_id, "Typed and then cancelled")
+
+    assert state.renaming == ""
+    assert state.history[0]["name"] == "Northwind"
+    assert load_cv(screen_data, cv_id).cv_name == "Northwind"
+
+
+def test_other_keys_leave_the_field_open(screen_data: Path) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    run(HomeState.escape_rename, state, "a")
+
+    assert state.renaming == cv_id
+
+
+def test_a_blank_name_keeps_the_one_it_had(screen_data: Path) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    run(HomeState.rename, state, cv_id, "   ")
+
+    assert state.renaming == ""
+    assert state.message == ""
+    assert load_cv(screen_data, cv_id).cv_name == "Northwind"
+
+
+def test_leaving_the_name_as_it_was_writes_nothing(screen_data: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    def fail(data_dir: Path, cv_id: str, name: str) -> None:
+        raise AssertionError("nothing changed, nothing to write")
+
+    monkeypatch.setattr(home_state, "rename_cv", fail)
+
+    run(HomeState.rename, state, cv_id, "Northwind")
+
+    assert state.renaming == ""
+
+
+def test_a_name_that_cannot_be_saved_says_so_and_keeps_the_old_one(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+
+    def full(data_dir: Path, cv_id: str, name: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device", str(data_dir / "cvs" / ".tmp"))
+
+    monkeypatch.setattr(home_state, "rename_cv", full)
+
+    run(HomeState.rename, state, cv_id, "Northwind, platform team")
+
+    assert state.message == "The name could not be saved: the disk is full"
+    assert state.history[0]["name"] == "Northwind"
+
+
+def test_a_cv_whose_record_is_gone_cannot_be_renamed(screen_data: Path) -> None:
+    state, cv_id = _home_with_a_cv(screen_data)
+    (screen_data / "cvs" / f"{cv_id}.json").unlink()
+
+    run(HomeState.rename, state, cv_id, "Northwind, platform team")
+
+    assert state.message == "That CV's record was not found, so its name cannot be changed."

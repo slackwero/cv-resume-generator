@@ -4,13 +4,15 @@ import asyncio
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
 from cv_generator.app.errors import pdf_not_written, readable, viewer_not_opened
+from cv_generator.app.focus import focus_on
 from cv_generator.rendering.i18n import load_language
-from cv_generator.services.generation import rewrite_pdf
+from cv_generator.services.generation import rename_cv, rewrite_pdf
 from cv_generator.services.profile import (
     load_profile,
     load_sync_status,
@@ -67,6 +69,8 @@ class HomeState(rx.State):
     show_archived: bool = False
     # cv_id being rebuilt right now, for that row's loading state.
     regenerating: str = ""
+    # cv_id whose name is being edited right now; its row shows a field instead of the name.
+    renaming: str = ""
 
     @rx.event
     def load(self) -> None:
@@ -217,6 +221,61 @@ class HomeState(rx.State):
             note_archive_reason(DATA_DIR, cv_id, reason)
         except (KeyError, OSError) as error:
             self.message = f"The reason could not be saved: {readable(error)}"
+            return
+        self._load_history()
+
+    @rx.event
+    def start_rename(self, cv_id: str) -> None:
+        self.message = ""
+        self.notice = ""
+        self.renaming = cv_id
+
+    @rx.event
+    def rename(self, cv_id: str, name: str) -> None:
+        """Saves the new name when you leave the field.
+
+        The keyboard is not brought back here: you left by clicking somewhere else, and
+        that is where it is going.
+        """
+        self._rename(cv_id, name)
+
+    @rx.event
+    def rename_from_form(self, data: dict[str, Any]) -> rx.event.EventSpec | None:
+        """When pressing Enter."""
+        cv_id = str(data.get("cv_id", ""))
+        self._rename(cv_id, str(data.get("name", "")))
+        return focus_on(f"rename-{cv_id}")
+
+    @rx.event
+    def escape_rename(self, key: str) -> rx.event.EventSpec | None:
+        """Escape closes the field and leaves the name as it was."""
+        if key != "Escape" or not self.renaming:
+            return None
+        cv_id, self.renaming = self.renaming, ""
+        return focus_on(f"rename-{cv_id}")
+
+    def _rename(self, cv_id: str, name: str) -> None:
+        """A blank name or the same one closes the field without writing.
+
+        Only the open field saves: closing it with Escape or Enter can still fire its
+        blur, and that late blur carries text that was cancelled or already saved.
+        """
+        if self.renaming != cv_id:
+            return
+        self.renaming = ""
+
+        new_name = name.strip()
+        current = next((cv["name"] for cv in self.history if cv["cv_id"] == cv_id), "")
+        if not new_name or new_name == current:
+            return
+
+        try:
+            rename_cv(DATA_DIR, cv_id, new_name)
+        except (FileNotFoundError, KeyError):
+            self.message = "That CV's record was not found, so its name cannot be changed."
+            return
+        except (ValueError, OSError) as error:
+            self.message = f"The name could not be saved: {readable(error)}"
             return
         self._load_history()
 

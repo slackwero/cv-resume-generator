@@ -133,18 +133,12 @@ def archive_cv(data_dir: Path, cv_id: str, *, archived: bool) -> list[HistoryEnt
     Raises:
         KeyError: if there is no CV with that id.
     """
-    entries = load_history(data_dir)
-    if not any(entry.cv_id == cv_id for entry in entries):
-        raise KeyError(f"there is no CV with id {cv_id!r}")
-
     change = (
         {"archived": True, "archived_at": datetime.now(UTC).replace(tzinfo=None)}
         if archived
         else {"archived": False, "archived_at": None, "archive_reason": ""}
     )
-    updated_entries = [entry.model_copy(update=change) if entry.cv_id == cv_id else entry for entry in entries]
-    save_history(data_dir, updated_entries)
-    return updated_entries
+    return _update_entry(data_dir, cv_id, change)
 
 
 def note_archive_reason(data_dir: Path, cv_id: str, reason: str) -> list[HistoryEntry]:
@@ -157,14 +151,33 @@ def note_archive_reason(data_dir: Path, cv_id: str, reason: str) -> list[History
     Raises:
         KeyError: if there is no CV with that id.
     """
+    return _update_entry(data_dir, cv_id, {"archive_reason": reason.strip()})
+
+
+def rename_entry(data_dir: Path, cv_id: str, name: str) -> list[HistoryEntry]:
+    """Changes the name a CV is listed under.
+
+    The name also lives in the snapshot, and `rename_cv` writes both: the list is
+    rebuilt from the snapshots, so a name kept only here would be lost in a rebuild.
+
+    Raises:
+        KeyError: if there is no CV with that id.
+    """
+    return _update_entry(data_dir, cv_id, {"cv_name": name})
+
+
+def _update_entry(data_dir: Path, cv_id: str, change: dict[str, object]) -> list[HistoryEntry]:
+    """Applies a change to one row of the index and rewrites it.
+
+    Raises:
+        KeyError: if there is no CV with that id. Failing silently would leave the
+        interface believing it changed something.
+    """
     entries = load_history(data_dir)
     if not any(entry.cv_id == cv_id for entry in entries):
         raise KeyError(f"there is no CV with id {cv_id!r}")
 
-    updated_entries = [
-        entry.model_copy(update={"archive_reason": reason.strip()}) if entry.cv_id == cv_id else entry
-        for entry in entries
-    ]
+    updated_entries = [entry.model_copy(update=change) if entry.cv_id == cv_id else entry for entry in entries]
     save_history(data_dir, updated_entries)
     return updated_entries
 

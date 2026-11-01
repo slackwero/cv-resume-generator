@@ -160,7 +160,9 @@ If you can try one of these, the checklist is in [docs/manual-testing.md](docs/m
 </table>
 
 The **Home** page lists every CV you generated, frozen exactly as you sent it, with the
-option to open, regenerate, clone or archive each one.
+option to open, regenerate, clone, rename or archive each one. Renaming changes only the
+name the CV is listed under: the PDF does not print it, so Regenerate still produces the
+same document.
 
 The PDFs are generated in `output/` with the format `initials-role-monthyear.pdf`
 (for example `jd-devsecops-march2026.pdf`). The month is written in the CV language.

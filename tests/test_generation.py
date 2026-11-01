@@ -8,7 +8,7 @@ from cv_generator.models.profile import Achievement, Experience, MasterProfile, 
 from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.i18n import default_sections
 from cv_generator.services import generation
-from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf
+from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv
 from cv_generator.storage.history import (
     archive_cv,
     load_history,
@@ -371,3 +371,71 @@ def test_generate_uses_the_selection_style(
     )
 
     assert received["style"] == Style(color=PaletteColor.RED)
+
+
+def _generated(tmp_path: Path, profile: MasterProfile, selection: Selection) -> str:
+    cv = generate_cv(
+        profile=profile,
+        selection=selection,
+        cv_name="DevSecOps at Acme",
+        target_role="DevSecOps",
+        language="es",
+        template="modern",
+        data_dir=tmp_path / "data",
+        output_dir=tmp_path / "output",
+        created=CREATED,
+    )
+    return cv.cv_id
+
+
+def test_renaming_changes_the_name_in_the_snapshot_and_the_list(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    cv_id = _generated(tmp_path, profile, selection)
+
+    rename_cv(tmp_path / "data", cv_id, "  Acme, platform team  ")
+
+    assert load_cv(tmp_path / "data", cv_id).cv_name == "Acme, platform team"
+    assert [entry.cv_name for entry in load_history(tmp_path / "data")] == ["Acme, platform team"]
+
+
+def test_renaming_leaves_what_was_sent_untouched(tmp_path: Path, profile: MasterProfile, selection: Selection) -> None:
+    """The name is only how the list shows it: the PDF does not print it, so Regenerate still gives the same one."""
+    cv_id = _generated(tmp_path, profile, selection)
+    before = load_cv(tmp_path / "data", cv_id)
+    pdf = Path(before.pdf_file)
+    pdf_before = pdf.read_bytes()
+
+    rename_cv(tmp_path / "data", cv_id, "Acme, platform team")
+
+    after = load_cv(tmp_path / "data", cv_id)
+    assert after.model_dump(exclude={"cv_name"}) == before.model_dump(exclude={"cv_name"})
+    assert pdf.read_bytes() == pdf_before
+
+
+def test_a_renamed_cv_keeps_its_name_when_the_list_is_rebuilt(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    """The list is rebuilt from the snapshots; a name kept only in the list would be lost."""
+    cv_id = _generated(tmp_path, profile, selection)
+    rename_cv(tmp_path / "data", cv_id, "Acme, platform team")
+    (tmp_path / "data" / "history.json").unlink()
+
+    assert [entry.cv_name for entry in rebuild_history(tmp_path / "data")] == ["Acme, platform team"]
+
+
+def test_a_blank_name_is_refused_and_nothing_changes(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    cv_id = _generated(tmp_path, profile, selection)
+
+    with pytest.raises(ValueError, match="name"):
+        rename_cv(tmp_path / "data", cv_id, "   ")
+
+    assert load_cv(tmp_path / "data", cv_id).cv_name == "DevSecOps at Acme"
+    assert [entry.cv_name for entry in load_history(tmp_path / "data")] == ["DevSecOps at Acme"]
+
+
+def test_renaming_a_cv_with_no_snapshot_fails(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        rename_cv(tmp_path / "data", "cv-ghost", "Acme")

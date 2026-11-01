@@ -6,7 +6,6 @@ Every operation saves right away, like the skills.
 """
 
 import asyncio
-import json
 from collections.abc import Callable
 from typing import Any
 
@@ -14,6 +13,7 @@ import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
 from cv_generator.app.errors import as_sentence
+from cv_generator.app.focus import focus_on
 from cv_generator.models.profile import MasterProfile
 from cv_generator.services import achievements as achievement_operations
 from cv_generator.services.achievements import origin_of
@@ -119,21 +119,6 @@ def focus_after_move(rows: list[dict[str, str]], key: str, offset: int) -> str:
     at_the_end = row["last"] if offset == 1 else row["first"]
     going_down = (offset == 1) != bool(at_the_end)
     return f"move-{'down' if going_down else 'up'}-{key}"
-
-
-def _focus(element_id: str) -> rx.event.EventSpec | None:
-    """Puts the keyboard on a control once the screen has redrawn.
-
-    Closing a form or moving a row takes the focused button out of the page, and the
-    browser drops the focus to the top of it: a keyboard user would have to start over.
-    Two frames, because the change arrives before React draws it.
-    """
-    if not element_id:
-        return None
-    target = json.dumps(element_id)
-    return rx.call_script(
-        f"requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById({target})?.focus()))"
-    )
 
 
 def _same_text(typed: str, saved: str) -> bool:
@@ -287,7 +272,7 @@ class ExperienceState(rx.State):
         self.editing_key = ""
         self.drafts.pop(key, None)
         self._clear_error()
-        return _focus(f"edit-{key}")
+        return focus_on(f"edit-{key}")
 
     @rx.event
     async def save_edit(self, data: dict[str, Any]) -> rx.event.EventSpec | None:
@@ -318,7 +303,7 @@ class ExperienceState(rx.State):
     def _close_editor(self, key: str) -> rx.event.EventSpec | None:
         self.editing_key = ""
         self.drafts.pop(key, None)
-        return _focus(f"edit-{key}")
+        return focus_on(f"edit-{key}")
 
     # ------------------------------------------------------- duplicate and move
 
@@ -341,7 +326,7 @@ class ExperienceState(rx.State):
             lambda profile: achievement_operations.move_achievement(profile, experience_id, achievement_id, offset),
             at=key,
         )
-        return _focus(focus_after_move(self.rows, key, offset)) if moved else None
+        return focus_on(focus_after_move(self.rows, key, offset)) if moved else None
 
     # ------------------------------------------------------------------ delete
 
@@ -356,7 +341,7 @@ class ExperienceState(rx.State):
         key = self.confirming_key
         self.confirming_key = ""
         self._clear_error()
-        return _focus(f"delete-{key}")
+        return focus_on(f"delete-{key}")
 
     @rx.event
     async def confirm_delete(self, key: str) -> rx.event.EventSpec | None:
@@ -373,7 +358,7 @@ class ExperienceState(rx.State):
         if not deleted:
             return None
         self.confirming_key = ""
-        return _focus(target)
+        return focus_on(target)
 
     # --------------------------------------------------------------------- add
 
@@ -389,7 +374,7 @@ class ExperienceState(rx.State):
         self.adding_to = ""
         self.drafts.pop(f"{experience_id}|add", None)
         self._clear_error()
-        return _focus(f"add-{experience_id}")
+        return focus_on(f"add-{experience_id}")
 
     @rx.event
     async def add(self, data: dict[str, Any]) -> rx.event.EventSpec | None:
@@ -406,4 +391,4 @@ class ExperienceState(rx.State):
             return None
         self.adding_to = ""
         self.drafts.pop(f"{experience_id}|add", None)
-        return _focus(f"add-{experience_id}")
+        return focus_on(f"add-{experience_id}")

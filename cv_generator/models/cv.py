@@ -88,7 +88,11 @@ class CVContent(BaseModel):
 
 
 class GeneratedCV(BaseModel):
-    """The immutable record of a CV that was already generated and sent."""
+    """The record of a CV that was already generated and sent.
+
+    What it says never changes. Only `cv_name`, the label it is listed under, can be
+    renamed: the PDF does not print it.
+    """
 
     schema_version: int = 1
     cv_id: str = Field(default_factory=lambda: f"cv-{uuid.uuid4().hex[:12]}")
