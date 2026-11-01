@@ -11,6 +11,7 @@ from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.renderer import (
     available_templates,
     load_meta,
+    missing_libraries_advice,
     render_html,
     render_pdf,
 )
@@ -147,3 +148,18 @@ def test_without_style_the_css_is_the_template_one(content: CVContent) -> None:
     assert render_html(content, "modern", language="es", style=Style()) == base
     red = render_html(content, "modern", language="es", style=Style(color=PaletteColor.RED))
     assert PALETTE[PaletteColor.RED].accent in red
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("win32", ["start.bat", "pacman -S mingw-w64-x86_64-pango", "WEASYPRINT_DLL_DIRECTORIES"]),
+        ("darwin", ["brew install pango"]),
+        ("linux", ["sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0"]),
+    ],
+)
+def test_missing_libraries_advice_names_the_fix_for_each_system(platform: str, expected: list[str]) -> None:
+    advice = missing_libraries_advice(platform)
+
+    for fragment in expected:
+        assert fragment in advice

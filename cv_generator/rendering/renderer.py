@@ -5,6 +5,7 @@ same one the interface shows in the preview. Without that single source, what th
 user sees would not be what they export.
 """
 
+import sys
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -119,16 +120,31 @@ def render_html(
     )
 
 
+def missing_libraries_advice(platform: str = sys.platform) -> str:
+    """Says, in plain words, how to install the libraries WeasyPrint needs on this system."""
+    if platform == "win32":
+        return (
+            "WeasyPrint could not load its native libraries. Starting the app with start.bat "
+            "installs them. To do it by hand, install MSYS2 and then run this in its window: "
+            "pacman -S mingw-w64-x86_64-pango. If MSYS2 is not in C:\\msys64, set the "
+            "WEASYPRINT_DLL_DIRECTORIES environment variable to the folder that holds its "
+            "DLL files (the mingw64\\bin folder)."
+        )
+    if platform == "darwin":
+        return "WeasyPrint could not load its native libraries. On macOS they are installed with: brew install pango"
+    return (
+        "WeasyPrint could not load its native libraries. On Debian or Ubuntu they are installed "
+        "with: sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0"
+    )
+
+
 def _load_weasyprint() -> type["HTML"]:
     """Imports WeasyPrint lazily, with a useful message if the native environment is missing."""
     prepare_native_libraries()
     try:
         from weasyprint import HTML
     except (ImportError, OSError) as exc:
-        raise RuntimeError(
-            "WeasyPrint could not load its native libraries. On macOS they are installed with: "
-            "brew install pango cairo gdk-pixbuf libffi"
-        ) from exc
+        raise RuntimeError(missing_libraries_advice()) from exc
     return HTML
 
 
