@@ -233,11 +233,14 @@ def _field(
     """A field with its scheme label above it."""
     return rx.el.label(
         legend(caption, color=TEXT_FAINT),
-        rx.el.input(
-            placeholder=placeholder,
-            value=value,
-            on_change=on_change_handler,
-            style={**field_style(), "margin_top": "0.375rem"},
+        # Buffered, or typing fast drops letters (tests/test_controlled_fields.py).
+        rx.debounce_input(
+            rx.el.input(
+                placeholder=placeholder,
+                value=value,
+                on_change=on_change_handler,
+                style={**field_style(), "margin_top": "0.375rem"},
+            ),
         ),
         rx.cond(
             hint != "",
@@ -961,12 +964,15 @@ def application_step() -> rx.Component:
             ),
             rx.el.label(
                 legend("Job description", color=TEXT_FAINT),
-                rx.el.textarea(
-                    placeholder="Paste the job description here…",
-                    value=WizardState.posting_text,
-                    on_change=WizardState.update_posting_text,
-                    rows="8",
-                    style={**field_style(), "margin_top": "0.375rem", "resize": "vertical", "line_height": "1.55"},
+                # Buffered, or typing fast drops letters (tests/test_controlled_fields.py).
+                rx.debounce_input(
+                    rx.el.textarea(
+                        placeholder="Paste the job description here…",
+                        value=WizardState.posting_text,
+                        on_change=WizardState.update_posting_text,
+                        rows="8",
+                        style={**field_style(), "margin_top": "0.375rem", "resize": "vertical", "line_height": "1.55"},
+                    ),
                 ),
                 style={"display": "block", "width": "100%"},
             ),
@@ -1561,11 +1567,14 @@ def _section_row(kind: rx.Var, index: rx.Var) -> rx.Component:
             on_change=lambda value: WizardState.toggle_section(kind, value),
             aria_label="Show the section " + WizardState.section_titles[kind],
         ),
-        rx.el.input(
-            value=WizardState.section_titles[kind],
-            on_change=lambda value: WizardState.change_title(kind, value),
-            aria_label="Title of the section " + WizardState.section_titles[kind],
-            style={**field_style(), "flex": "1 1 auto", "min_width": "0"},
+        # Buffered, or typing fast drops letters (tests/test_controlled_fields.py).
+        rx.debounce_input(
+            rx.el.input(
+                value=WizardState.section_titles[kind],
+                on_change=lambda value: WizardState.change_title(kind, value),
+                aria_label="Title of the section " + WizardState.section_titles[kind],
+                style={**field_style(), "flex": "1 1 auto", "min_width": "0"},
+            ),
         ),
         _move_button(
             "chevron_up",

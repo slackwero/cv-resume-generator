@@ -385,12 +385,15 @@ def _search_box() -> rx.Component:
                     "color": TEXT_MUTED,
                 },
             ),
-            rx.el.input(
-                placeholder="Search by name, role or template",
-                value=HomeState.search_query,
-                on_change=HomeState.search,
-                aria_label="Search the history",
-                style={**field_style(), "padding_left": "2.25rem"},
+            # Buffered, or typing fast drops letters (tests/test_controlled_fields.py).
+            rx.debounce_input(
+                rx.el.input(
+                    placeholder="Search by name, role or template",
+                    value=HomeState.search_query,
+                    on_change=HomeState.search,
+                    aria_label="Search the history",
+                    style={**field_style(), "padding_left": "2.25rem"},
+                ),
             ),
             style={"position": "relative", "flex": "1 1 20rem", "max_width": "26rem", "min_width": "0"},
         ),
