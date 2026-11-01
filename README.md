@@ -36,8 +36,17 @@ sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
 On Linux, `curl` and `unzip` too: Reflex uses them to download bun, which runs the
 interface.
 
-On Windows, the simplest route is [WSL](https://learn.microsoft.com/windows/wsl/) with the
-Debian / Ubuntu line above; for a native install, follow WeasyPrint's guide linked above.
+On Windows, the app runs natively; WSL is not needed. `start.bat` installs what is
+missing (see the quick start). By hand, install uv, then [MSYS2](https://www.msys2.org/)
+and, in its MINGW64 shell, Pango:
+
+```bash
+pacman -S mingw-w64-x86_64-pango
+```
+
+Then run `uv run reflex run` in the project folder. WeasyPrint finds `C:\msys64\mingw64\bin`
+by itself. If MSYS2 is somewhere else, set the `WEASYPRINT_DLL_DIRECTORIES` environment
+variable to its `mingw64\bin` folder. The app does not need Node: Reflex downloads bun.
 
 ## Installation
 
@@ -52,12 +61,14 @@ No terminal needed on macOS.
    **Open Anyway**. Only once.
 3. **Linux:** open a terminal in the folder and run `./start.sh`. If it says
    "Permission denied", run `bash start.sh`.
-4. Say yes to what it offers to install. First uv, the tool that downloads Python and the
+4. **Windows:** double-click `start.bat`. It installs what is missing, as below.
+5. Say yes to what it offers to install. First uv, the tool that downloads Python and the
    app's packages. Then, on macOS, Homebrew, which asks for your password, and Pango; on
-   Linux, Pango, curl and unzip, with your password. The first start takes a few minutes
+   Linux, Pango, curl and unzip, with your password; on Windows, Pango through MSYS2.
+   The first start takes a few minutes
    (on a Mac without Homebrew, 10 to 20 more); the next ones take seconds, with no
    questions.
-5. The browser opens on the app. If it does not, go to <http://localhost:3000>. To stop
+6. The browser opens on the app. If it does not, go to <http://localhost:3000>. To stop
    the app, close the window or press Ctrl+C. If something fails, `start.log` in the same
    folder says what happened.
 
@@ -95,7 +106,7 @@ PDFs in `output/`, both excluded from git.
 > (`uv run reflex run`), other computers on your network can still load the interface's
 > code from port 3000, but not your data.
 >
-> Started with `start.command` or `start.sh`, the app runs in production mode on one
+> Started with `start.command`, `start.sh` or `start.bat`, the app runs in production mode on one
 > port, behind that same protection: nothing in it, interface included, is reachable
 > from other computers.
 
@@ -103,9 +114,17 @@ PDFs in `output/`, both excluded from git.
 
 CI starts the app from the ZIP GitHub serves on Ubuntu, macOS and Windows runners, in a
 folder with a space and an accent, with Node.js hidden. It also starts it from scratch in
-Ubuntu 24.04 and Fedora containers. What it cannot cover:
+Ubuntu 24.04 and Fedora containers. On Windows it also runs the whole test suite (953
+passed; the 6 skipped are POSIX-only signal tests), rendering real PDFs with WeasyPrint
+and the runner's MSYS2 Pango, and its launcher job installs uv and Pango itself and
+checks that the app answers on 127.0.0.1 and refuses other addresses and foreign
+origins. What it cannot cover:
 
 - The first double-click and Gatekeeper on a Mac that downloaded the ZIP.
+- On Windows: the double-click on `start.bat`, the SmartScreen warning, and a real
+  winget and MSYS2 install on a person's PC.
+- On Windows: opening a PDF in a real viewer, and the message you get when the viewer
+  has it locked.
 - Installing Homebrew from nothing.
 - Linux desktops: CI runs containers, not desktops.
 - Distributions without apt or dnf. The launcher explains the manual steps.

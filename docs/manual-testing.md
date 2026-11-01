@@ -55,4 +55,29 @@ Use a machine, or a user account, that has never run the app.
 - [ ] **Stop.** Press Ctrl+C. The app stops and the port is free.
 - [ ] **Second start.** Run `./start.sh` again: seconds, no questions.
 
-Windows is added with the next part of the launcher.
+## Windows
+
+On Windows, Open uses the PDF's associated viewer. A PDF open in a viewer is locked, so
+Regenerate and Generate cannot replace it and say to close it and try again.
+
+- [ ] **Download and start.** On GitHub, click Code → Download ZIP, unzip it and
+  double-click `start.bat`. Write down whether SmartScreen warns and how you got past it.
+- [ ] **The questions.** Without uv or MSYS2 Pango, it asks before installing them
+  (through winget and pacman). Nothing installs without a yes.
+- [ ] **The browser opens** on <http://localhost:3000> and shows the Home page.
+- [ ] **Import the ZIP.** In Sync, upload the LinkedIn ZIP export and apply the changes.
+  The master profile appears in My profile.
+- [ ] **Import the PDF.** In Sync, upload a profile PDF (More → Save to PDF), review the
+  changes and apply them. Nothing you completed by hand is lost.
+- [ ] **Contact and photo.** In My profile, edit Contact (the phone, for example) and
+  upload a photo. Both are still there after reloading the page.
+- [ ] **Wizard and Generate.** In New CV, go through the six steps, check the preview and
+  generate. A PDF appears in `output/`.
+- [ ] **Open.** Click Open on the CV. The PDF opens in your default viewer.
+- [ ] **Regenerate with the PDF open.** Leave the PDF open in the viewer and click
+  Regenerate. It does not replace the file and says to close the PDF and try again.
+  Close the viewer and click Regenerate again: it works.
+- [ ] **Clone and archive.** Clone the CV: a new one appears with the same content.
+  Archive one: it leaves the active list and keeps its date and reason.
+- [ ] **Stop and start again.** Close the window. Double-click `start.bat` again: seconds,
+  no questions, and the profile and the CVs are still there.
