@@ -16,7 +16,7 @@ from cv_generator.services.profile import (
     load_sync_status,
     pending_fields,
 )
-from cv_generator.services.system import open_with_viewer
+from cv_generator.services.system import ViewerUnavailable, open_with_viewer
 from cv_generator.storage.history import archive_cv, load_history, note_archive_reason
 from cv_generator.text import normalize, plural
 
@@ -278,6 +278,11 @@ class HomeState(rx.State):
         self.message = ""
         try:
             open_with_viewer(Path(path), OUTPUT_DIR)
+        except ViewerUnavailable as error:
+            self.message = (
+                f"Your PDF viewer could not be opened: {readable(error.__cause__)}. "
+                f"Open {Path(path).name} from the output/ folder yourself."
+            )
         except FileNotFoundError:
             self.message = (
                 f"The file {Path(path).name} is no longer in output/. "

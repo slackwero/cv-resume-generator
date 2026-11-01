@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from cv_generator.services.system import open_with_viewer
+from cv_generator.services import system
+from cv_generator.services.system import ViewerUnavailable, open_with_viewer
 
 
 def test_rejects_a_file_outside_the_allowed_directory(tmp_path: Path) -> None:
@@ -29,3 +30,59 @@ def test_rejects_a_missing_file(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError):
         open_with_viewer(allowed / "missing.pdf", allowed)
+
+
+def _pdf(folder: Path) -> Path:
+    pdf = folder / "cv.pdf"
+    pdf.write_bytes(b"%PDF-")
+    return pdf
+
+
+def test_windows_opens_the_file_with_its_associated_viewer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = _pdf(tmp_path)
+    opened: list[Path] = []
+    monkeypatch.setattr(system.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(system.subprocess, "run", lambda *a, **k: pytest.fail("no subprocess on Windows"))
+
+    open_with_viewer(pdf, tmp_path, platform="win32")
+
+    assert opened == [pdf.resolve()]
+
+
+def test_macos_opens_with_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = _pdf(tmp_path)
+    calls: list[tuple[list[str], dict]] = []
+    monkeypatch.setattr(system.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+
+    open_with_viewer(pdf, tmp_path, platform="darwin")
+
+    assert calls == [(["/usr/bin/open", str(pdf.resolve())], {"check": False})]
+
+
+def test_a_viewer_that_cannot_start_is_not_a_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = _pdf(tmp_path)
+
+    def missing(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(system.subprocess, "run", missing)
+
+    with pytest.raises(ViewerUnavailable) as raised:
+        open_with_viewer(pdf, tmp_path, platform="linux")
+
+    assert not isinstance(raised.value, FileNotFoundError)
+    assert isinstance(raised.value.__cause__, FileNotFoundError)
+
+
+def test_windows_without_an_associated_viewer_is_viewer_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = _pdf(tmp_path)
+
+    def no_association(path: Path) -> None:
+        raise OSError(1155, "No application is associated")
+
+    monkeypatch.setattr(system.os, "startfile", no_association, raising=False)
+
+    with pytest.raises(ViewerUnavailable):
+        open_with_viewer(pdf, tmp_path, platform="win32")
