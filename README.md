@@ -126,8 +126,8 @@ If you can try one of these, the checklist is in [docs/manual-testing.md](docs/m
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/profile.png" alt="My profile page"><br>
-      <sub><b>My profile.</b> What LinkedIn does not provide, like the phone.</sub></td>
+    <td width="50%"><img src="docs/screenshots/profile.png" alt="My profile, Work experience subsection"><br>
+      <sub><b>My profile.</b> Rewrite, duplicate or add the achievements of each job for the next CVs.</sub></td>
     <td width="50%"><img src="docs/screenshots/wizard-template.png" alt="Wizard step 1, choosing the template"><br>
       <sub><b>Step 1, template.</b> Every thumbnail is your own CV, really rendered.</sub></td>
   </tr>
