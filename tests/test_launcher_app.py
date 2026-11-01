@@ -348,6 +348,56 @@ def test_on_windows_a_failed_taskkill_still_kills_the_app_and_the_wait_is_bounde
     assert None not in leader.waits
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [FileNotFoundError("taskkill"), subprocess.TimeoutExpired("taskkill", 15)],
+    ids=["taskkill-missing", "taskkill-hangs"],
+)
+def test_on_windows_a_taskkill_that_cannot_run_still_kills_the_app_and_the_wait_is_bounded(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    def broken_taskkill(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        raise failure
+
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(app_module.subprocess, "run", broken_taskkill)
+    leader = WindowsLeader()
+    stop_app(leader)
+    assert leader.killed
+    assert leader.waits
+    assert None not in leader.waits
+
+
+def test_on_windows_every_wait_of_a_stop_is_bounded_and_the_last_one_as_on_posix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taskkill_timeouts: list[object] = []
+
+    def taskkill(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        taskkill_timeouts.append(kwargs.get("timeout"))
+        return subprocess.CompletedProcess(command, 0)
+
+    def group_gone(group: int, sig: int) -> None:
+        raise ProcessLookupError
+
+    class PosixLeader(WindowsLeader):
+        def poll(self) -> None:
+            return None
+
+    monkeypatch.setattr(app_module.subprocess, "run", taskkill)
+    monkeypatch.setattr(app_module.os, "killpg", group_gone, raising=False)  # Windows has no killpg
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", False)
+    on_posix = PosixLeader()
+    stop_app(on_posix)
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", True)
+    on_windows = WindowsLeader()
+    stop_app(on_windows)
+    assert taskkill_timeouts
+    assert None not in taskkill_timeouts
+    assert on_windows.waits
+    assert on_windows.waits == on_posix.waits
+
+
 def test_open_browser_reports_failure_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(url: str) -> bool:
         raise RuntimeError(url)
