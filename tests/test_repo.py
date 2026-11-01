@@ -1,7 +1,11 @@
+import errno
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from cv_generator.storage import repo
 from cv_generator.storage.repo import read_json, save_json
 
 
@@ -55,3 +59,59 @@ def test_leaves_no_temp_files_after_a_failure(tmp_path: Path, monkeypatch: pytes
 
     monkeypatch.undo()
     assert list(tmp_path.iterdir()) == [path]
+
+
+def _fail_replace(monkeypatch: pytest.MonkeyPatch, errors: list[OSError]) -> tuple[list[float], list[int]]:
+    """Makes os.replace raise the given errors in order, then work. Returns (waits, calls)."""
+    waits: list[float] = []
+    calls: list[int] = []
+    pending = list(errors)
+
+    def flaky_replace(src: Path, dst: Path) -> None:
+        calls.append(1)
+        if pending:
+            raise pending.pop(0)
+        os.replace(src, dst)
+
+    monkeypatch.setattr(repo, "os", SimpleNamespace(replace=flaky_replace))
+    monkeypatch.setattr(repo, "_sleep", waits.append)
+    return waits, calls
+
+
+def test_waits_out_a_brief_lock_on_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "profile.json"
+    save_json(path, {"first_name": "Jane"})
+    waits, calls = _fail_replace(monkeypatch, [PermissionError("locked"), PermissionError("locked")])
+
+    save_json(path, {"first_name": "John"})
+
+    assert read_json(path) == {"first_name": "John"}
+    assert len(calls) == 3
+    assert waits == [0.05, 0.1]
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_gives_up_after_five_attempts_and_leaves_no_temp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "profile.json"
+    save_json(path, {"first_name": "Jane"})
+    waits, calls = _fail_replace(monkeypatch, [PermissionError("locked")] * 5)
+
+    with pytest.raises(PermissionError):
+        save_json(path, {"first_name": "John"})
+
+    assert len(calls) == 5
+    assert waits == [0.05, 0.1, 0.2, 0.4]
+    assert list(tmp_path.iterdir()) == [path]
+    assert read_json(path) == {"first_name": "Jane"}
+
+
+def test_does_not_retry_other_disk_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "profile.json"
+    waits, calls = _fail_replace(monkeypatch, [OSError(errno.ENOSPC, "No space left on device")])
+
+    with pytest.raises(OSError, match="space"):
+        save_json(path, {"first_name": "John"})
+
+    assert len(calls) == 1
+    assert waits == []
+    assert list(tmp_path.iterdir()) == []
