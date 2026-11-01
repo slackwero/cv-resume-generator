@@ -34,30 +34,37 @@ if (-not $uv) {
             if ($reply.Trim() -eq '') { $answer = 'y' } else { $answer = $reply.Trim() }
         }
     }
+    $manualHelp = 'To install it yourself, follow https://docs.astral.sh/uv/getting-started/installation/ and then start CV Generator again.'
     if ($answer -notin @('y', 'yes')) {
-        Write-Host 'To install it yourself, follow https://docs.astral.sh/uv/getting-started/installation/ and then start CV Generator again.'
+        Write-Host $manualHelp
         exit 1
     }
     # The installer would otherwise edit the person's PATH.
     $env:UV_NO_MODIFY_PATH = '1'
-    # Started from PowerShell 7, this Windows PowerShell inherits PowerShell 7's
-    # module folders and cannot load commands the installer needs from them, such
-    # as Get-ExecutionPolicy. Use the system's own module folders, when it has any.
+    # Started from PowerShell 7, Windows PowerShell inherits PowerShell 7's module
+    # folders and cannot load commands the installer needs from them, such as
+    # Get-ExecutionPolicy. The installer's powershell below gets the system's own
+    # module folders instead, when it has any.
     $machineModules = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
     if ($machineModules) {
         $env:PSModulePath = $machineModules
     }
+    # The installer gets a powershell of its own, with the flags start.bat gives
+    # this one: when it fails it runs `exit 1`, which in this one would end the
+    # script before it could say what to do next. Old Windows 10 builds default
+    # to older TLS versions, hence the first statement.
+    $installed = $false
     try {
-        # Old Windows 10 builds default to older TLS versions.
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        irm https://astral.sh/uv/install.ps1 | iex
+        & powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex'
+        $installed = $LASTEXITCODE -eq 0
     }
     catch {
         Write-Host $_.Exception.Message
     }
     $uv = Find-Uv
-    if (-not $uv) {
+    if (-not $installed -or -not $uv) {
         Write-Host 'Installing uv did not work.'
+        Write-Host $manualHelp
         exit 1
     }
 }
