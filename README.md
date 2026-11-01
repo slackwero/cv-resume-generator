@@ -64,7 +64,7 @@ No terminal needed on macOS.
 4. **Windows:** double-click `start.bat`. It installs what is missing, as below.
 5. Say yes to what it offers to install. First uv, the tool that downloads Python and the
    app's packages. Then, on macOS, Homebrew, which asks for your password, and Pango; on
-   Linux, Pango, curl and unzip, with your password; on Windows, Pango through MSYS2.
+   Linux, Pango, curl and unzip, with your password; on Windows, MSYS2 and, through it, Pango.
    The first start takes a few minutes
    (on a Mac without Homebrew, 10 to 20 more); the next ones take seconds, with no
    questions.
@@ -114,8 +114,8 @@ PDFs in `output/`, both excluded from git.
 
 CI starts the app from the ZIP GitHub serves on Ubuntu, macOS and Windows runners, in a
 folder with a space and an accent, with Node.js hidden. It also starts it from scratch in
-Ubuntu 24.04 and Fedora containers. On Windows it also runs the whole test suite (953
-passed; the 6 skipped are POSIX-only signal tests), rendering real PDFs with WeasyPrint
+Ubuntu 24.04 and Fedora containers. On Windows it also runs the whole test suite (it
+passes; only POSIX-only signal tests are skipped), rendering real PDFs with WeasyPrint
 and the runner's MSYS2 Pango, and its launcher job installs uv and Pango itself and
 checks that the app answers on 127.0.0.1 and refuses other addresses and foreign
 origins. What it cannot cover:
@@ -123,6 +123,7 @@ origins. What it cannot cover:
 - The first double-click and Gatekeeper on a Mac that downloaded the ZIP.
 - On Windows: the double-click on `start.bat`, the SmartScreen warning, and a real
   winget and MSYS2 install on a person's PC.
+- On Windows: stopping the app with Ctrl+C or by closing the window.
 - On Windows: opening a PDF in a real viewer, and the message you get when the viewer
   has it locked.
 - Installing Homebrew from nothing.

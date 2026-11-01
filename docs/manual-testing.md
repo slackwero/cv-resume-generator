@@ -58,12 +58,13 @@ Use a machine, or a user account, that has never run the app.
 ## Windows
 
 On Windows, Open uses the PDF's associated viewer. A PDF open in a viewer is locked, so
-Regenerate and Generate cannot replace it and say to close it and try again.
+Regenerate cannot replace it and says to close it and try again.
 
 - [ ] **Download and start.** On GitHub, click Code → Download ZIP, unzip it and
   double-click `start.bat`. Write down whether SmartScreen warns and how you got past it.
 - [ ] **The questions.** Without uv or MSYS2 Pango, it asks before installing them
-  (through winget and pacman). Nothing installs without a yes.
+  (uv through Astral's PowerShell installer, MSYS2 through winget, Pango through pacman:
+  three separate questions). Nothing installs without a yes.
 - [ ] **The browser opens** on <http://localhost:3000> and shows the Home page.
 - [ ] **Import the ZIP.** In Sync, upload the LinkedIn ZIP export and apply the changes.
   The master profile appears in My profile.
@@ -79,5 +80,9 @@ Regenerate and Generate cannot replace it and say to close it and try again.
   Close the viewer and click Regenerate again: it works.
 - [ ] **Clone and archive.** Clone the CV: a new one appears with the same content.
   Archive one: it leaves the active list and keeps its date and reason.
-- [ ] **Stop and start again.** Close the window. Double-click `start.bat` again: seconds,
+- [ ] **Stop with Ctrl+C.** Start with `start.bat`, press Ctrl+C in its window. The app
+  stops and the port is free: `netstat -ano | findstr :3000` prints nothing.
+- [ ] **Stop by closing the window.** Start with `start.bat` and close the window. The
+  port is free: `netstat -ano | findstr :3000` prints nothing.
+- [ ] **Stop and start again.** Double-click `start.bat` again: seconds,
   no questions, and the profile and the CVs are still there.
