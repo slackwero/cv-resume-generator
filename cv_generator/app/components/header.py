@@ -70,7 +70,9 @@ ROOTLESS_PATHS = ("/new", "/profile", "/sync")
 
 
 def _current_path() -> rx.Var:
-    return rx.State.router.url.path
+    """The browser's path without a trailing slash: /profile/ opens My profile and has to
+    mark it too. At the root it is empty, and the root is deduced, not compared."""
+    return rx.State.router.url.path.rstrip("/")
 
 
 def _mark() -> rx.Component:
