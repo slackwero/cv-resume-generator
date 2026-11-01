@@ -40,6 +40,7 @@ class Calls:
         self.opened: list[str] = []
         self.stopped: list[object] = []
         self.commands: list[list[str]] = []
+        self.envs: list[object] = []
 
 
 def present(name: str = "Pango") -> prerequisites.Prerequisite:
@@ -64,6 +65,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
 
     def fake_run_logged(command, log, **kwargs):  # noqa: ANN001, ANN003, ANN202
         seen.commands.append(list(command))
+        seen.envs.append(kwargs.get("env"))
         return True
 
     def fake_open(url: str) -> bool:
@@ -252,6 +254,12 @@ def test_the_commands_are_the_documented_ones(calls: Calls, tmp_path: Path) -> N
     main([], folder=tmp_path)
     assert calls.commands[0] == ["/x/uv", "sync", "--frozen"]
     assert calls.commands[1] == ["/x/uv", "run", "--frozen", "python", "-c", "import cv_generator, weasyprint"]
+
+
+def test_the_python_children_write_utf8_into_the_log(calls: Calls, tmp_path: Path) -> None:
+    """The log is UTF-8; on Windows Python would otherwise write their output in cp1252."""
+    main([], folder=tmp_path)
+    assert calls.envs[:2] == [{"PYTHONUTF8": "1"}, {"PYTHONUTF8": "1"}]
 
 
 def test_a_browser_that_does_not_open_tells_the_person_the_address(

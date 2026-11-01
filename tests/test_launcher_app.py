@@ -185,6 +185,21 @@ def test_the_app_runs_as_a_module_so_a_moved_folder_still_starts() -> None:
     ]
 
 
+def test_the_app_writes_utf8_into_the_log_and_keeps_the_rest_of_the_environment(
+    tmp_path: Path, log: TextIO, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The log is UTF-8; on Windows Python would otherwise write the app's output in cp1252."""
+    monkeypatch.setenv("CV_GENERATOR_KEPT", "kept")
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    code = "import os, sys; print('utf8_mode', sys.flags.utf8_mode, os.environ['CV_GENERATOR_KEPT'], 'de José')"
+    process = start_app([sys.executable, "-c", code], tmp_path, log)
+    try:
+        assert process.wait(timeout=30) == 0
+    finally:
+        _kill_leftovers(process)
+    assert "utf8_mode 1 kept de José" in (tmp_path / "start.log").read_text(encoding="utf-8")
+
+
 def test_ready_when_ping_answers(serve: SERVE, tmp_path: Path, log: TextIO) -> None:
     port = serve("whatever")
     process = start_app([sys.executable, "-c", "import time; time.sleep(30)"], tmp_path, log)

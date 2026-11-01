@@ -18,6 +18,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TextIO
 
+from launcher.console import PYTHON_UTF8
+
 DEFAULT_PORT = 3000
 READY_TIMEOUT_SECONDS = 900  # the first start compiles the frontend, which takes minutes
 STOP_GRACE_SECONDS = 15.0
@@ -111,6 +113,7 @@ def start_app(command: Sequence[str], folder: Path, log: TextIO) -> "subprocess.
     return subprocess.Popen(  # noqa: S603 - the command is built by app_command from constants
         list(command),
         cwd=folder,
+        env={**os.environ, **PYTHON_UTF8},
         stdin=subprocess.DEVNULL,
         stdout=log,
         stderr=subprocess.STDOUT,

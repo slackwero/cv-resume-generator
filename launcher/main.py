@@ -132,13 +132,16 @@ def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[su
             "The first start downloads the app's components and takes a few minutes. The next starts take seconds."
         )
     console.say("Preparing the app...")
-    if not console.run_logged([uv, "sync", "--frozen"], log, cwd=folder):
+    if not console.run_logged([uv, "sync", "--frozen"], log, cwd=folder, env=console.PYTHON_UTF8):
         raise _Failure(
             "Preparing the app did not work. Check your internet connection and try again. "
             f"The details are in {log_path}."
         )
     if not console.run_logged(
-        [uv, "run", "--frozen", "python", "-c", "import cv_generator, weasyprint"], log, cwd=folder
+        [uv, "run", "--frozen", "python", "-c", "import cv_generator, weasyprint"],
+        log,
+        cwd=folder,
+        env=console.PYTHON_UTF8,
     ):
         raise _Failure(
             f"The libraries that draw the PDFs are installed but could not be loaded. The details are in {log_path}."

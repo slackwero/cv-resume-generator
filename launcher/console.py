@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import TextIO
 
 LOG_NAME = "start.log"
+# For the Python children whose output goes into the log, which is UTF-8: on Windows
+# Python would otherwise write it in the system's code page, such as cp1252.
+PYTHON_UTF8 = {"PYTHONUTF8": "1"}
 
 _YES = {"", "y", "yes"}
 _NO = {"n", "no"}
