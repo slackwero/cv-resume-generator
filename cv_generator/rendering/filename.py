@@ -10,12 +10,23 @@ from pathlib import Path
 from cv_generator.rendering.i18n import load_language
 from cv_generator.text import strip_accents
 
+# Keeps the full path of the PDF well under Windows' 260 characters.
+MAX_ROLE_SLUG_LENGTH = 60
+
 
 def slugify(text: str) -> str:
     """Turns free text into a fragment that is safe for a file name."""
     without_accents = strip_accents(text).lower()
     alphanumeric_only = re.sub(r"[^a-z0-9]+", "-", without_accents)
     return alphanumeric_only.strip("-")
+
+
+def _shorten_slug(slug: str) -> str:
+    """Cuts a slug at the last hyphen within the limit, or hard if it has none."""
+    if len(slug) <= MAX_ROLE_SLUG_LENGTH:
+        return slug
+    last_hyphen = slug.rfind("-", 0, MAX_ROLE_SLUG_LENGTH + 1)
+    return slug[:last_hyphen] if last_hyphen > 0 else slug[:MAX_ROLE_SLUG_LENGTH]
 
 
 def build_initials(first_name: str, last_name: str) -> str:
@@ -36,12 +47,16 @@ def build_filename(
     """
     initials = build_initials(first_name, last_name)
     month = load_language(language).months[on_date.month - 1]
-    return f"{initials}-{slugify(role)}-{month}{on_date.year}.pdf"
+    return f"{initials}-{_shorten_slug(slugify(role))}-{month}{on_date.year}.pdf"
 
 
 def _validate_simple_name(name: str) -> None:
-    """Requires the name to be a bare file, with no path components."""
-    if not name or name != Path(name).name:
+    """Requires the name to be a bare file, with no path components.
+
+    Backslashes and colons are rejected everywhere: Windows reads them as path
+    separators and drive letters, while on macOS and Linux they would pass as plain characters.
+    """
+    if not name or name != Path(name).name or "\\" in name or ":" in name:
         raise ValueError(f"invalid file name: {name!r}")
 
 

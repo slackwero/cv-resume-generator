@@ -9,6 +9,7 @@ from cv_generator.models.profile import Achievement, Experience, Skill
 from cv_generator.models.sections import Section, SectionKind
 from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.renderer import (
+    PROJECT_ROOT,
     available_templates,
     load_meta,
     missing_libraries_advice,
@@ -163,3 +164,21 @@ def test_missing_libraries_advice_names_the_fix_for_each_system(platform: str, e
 
     for fragment in expected:
         assert fragment in advice
+
+
+def test_passes_weasyprint_a_file_url_as_base(content: CVContent, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, str] = {}
+
+    class SpyHTML:
+        def __init__(self, *, string: str, base_url: str) -> None:
+            seen["base_url"] = base_url
+
+        def render(self) -> object:
+            raise StopIteration
+
+    monkeypatch.setattr("cv_generator.rendering.renderer._load_weasyprint", lambda: SpyHTML)
+
+    with pytest.raises(StopIteration):
+        render_pdf(content, "modern", language="es")
+
+    assert seen["base_url"] == PROJECT_ROOT.as_uri()

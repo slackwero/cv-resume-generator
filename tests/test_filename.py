@@ -56,7 +56,7 @@ def test_does_not_overwrite_the_original_file(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "malicious_name",
-    ["../outside.pdf", "../../etc/passwd", "sub/dir/cv.pdf", "/absolute.pdf"],
+    ["../outside.pdf", "../../etc/passwd", "sub/dir/cv.pdf", "/absolute.pdf", "..\\x", "C:\\x", "C:x"],
 )
 def test_rejects_names_that_escape_the_directory(tmp_path: Path, malicious_name: str) -> None:
     with pytest.raises(ValueError, match="invalid file name"):
@@ -73,3 +73,20 @@ def test_normalizes_accents_and_spaces_in_the_role() -> None:
     )
 
     assert result == "an-analista-de-programacion-senor-diciembre2026.pdf"
+
+
+def test_cuts_a_long_role_at_a_word_boundary_within_the_limit() -> None:
+    role = " ".join(["senior"] * 40)
+
+    result = build_filename("Jane", "Doe", role, date(2026, 12, 1), "es")
+
+    assert len(result) <= 90
+    assert result.endswith("-diciembre2026.pdf")
+    assert not result.endswith("--diciembre2026.pdf")
+    assert result == "jd-" + "-".join(["senior"] * 8) + "-diciembre2026.pdf"
+
+
+def test_cuts_a_long_role_without_hyphens_hard_at_the_limit() -> None:
+    result = build_filename("Jane", "Doe", "a" * 200, date(2026, 12, 1), "es")
+
+    assert result == "jd-" + "a" * 60 + "-diciembre2026.pdf"

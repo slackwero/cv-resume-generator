@@ -161,7 +161,7 @@ def render_pdf_and_pages(
         RuntimeError: if WeasyPrint cannot load its native libraries.
     """
     html = render_html(content, slug, today, language=language, style=style)
-    document = _load_weasyprint()(string=html, base_url=str(PROJECT_ROOT)).render()
+    document = _load_weasyprint()(string=html, base_url=PROJECT_ROOT.as_uri()).render()
     return document.write_pdf(), len(document.pages)
 
 
