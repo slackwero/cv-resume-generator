@@ -2,7 +2,9 @@
 
 import json
 import os
+import tempfile
 import time
+from os import close as _close_fd
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +31,10 @@ def save_json(path: Path, data: dict[str, Any]) -> None:
     few times (under a second in all) before giving up.
     """
     content = json.dumps(data, ensure_ascii=False, indent=2)
-    temp_path = path.with_name(f".{path.name}.tmp")
+    # A name of its own per save: two tabs saving the same file must not share one.
+    descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    _close_fd(descriptor)
+    temp_path = Path(temp_name)
     try:
         temp_path.write_text(content, encoding="utf-8")
         for wait in _REPLACE_WAITS:

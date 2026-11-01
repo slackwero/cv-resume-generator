@@ -115,3 +115,23 @@ def test_does_not_retry_other_disk_errors(tmp_path: Path, monkeypatch: pytest.Mo
     assert len(calls) == 1
     assert waits == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_every_save_writes_through_its_own_temp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two tabs saving the same file at once must not share a temp file."""
+    path = tmp_path / "profile.json"
+    names: list[str] = []
+    real_replace = os.replace
+
+    def spy(src: Path, dst: Path) -> None:
+        names.append(Path(src).name)
+        real_replace(src, dst)
+
+    monkeypatch.setattr(repo, "os", SimpleNamespace(replace=spy))
+
+    save_json(path, {"n": 1})
+    save_json(path, {"n": 2})
+
+    assert len(names) == 2
+    assert names[0] != names[1]
+    assert list(tmp_path.iterdir()) == [path]
