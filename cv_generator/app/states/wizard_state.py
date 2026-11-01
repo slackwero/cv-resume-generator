@@ -13,6 +13,7 @@ from cv_generator.app.config import (
     DEFAULT_TEMPLATE,
     OUTPUT_DIR,
 )
+from cv_generator.app.errors import readable
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
@@ -1159,7 +1160,7 @@ class WizardState(rx.State):
             return resolve_content(self._profile, self._build_selection())
         except (KeyError, ValueError) as error:
             self.action_error = (
-                f"The CV could not be built: {error}. Go back to step 4 and check that "
+                f"The CV could not be built: {readable(error)}. Go back to step 4 and check that "
                 "at least one experience is checked."
             )
             return None
@@ -1219,7 +1220,8 @@ class WizardState(rx.State):
             return
         except (KeyError, ValueError) as error:
             self.action_error = (
-                f"The template '{self.template}' could not be rendered: {error}. Go back to step 1 and try another one."
+                f"The template '{self.template}' could not be rendered: {readable(error)}. "
+                "Go back to step 1 and try another one."
             )
             self.previewing = False
             return
@@ -1229,7 +1231,7 @@ class WizardState(rx.State):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(pdf)
         except OSError as error:
-            self.action_error = f"The preview could not be written to disk: {error}"
+            self.action_error = f"The preview could not be written to disk: {readable(error)}"
             self.previewing = False
             return
 
@@ -1281,13 +1283,15 @@ class WizardState(rx.State):
             return
         except OSError as error:
             self.action_error = (
-                f"The PDF could not be written to output/: {error}. Check that the folder exists and is writable."
+                f"The PDF could not be written to output/: {readable(error)}. "
+                "Check that the folder exists and is writable."
             )
             self.generating = False
             return
         except (KeyError, ValueError) as error:
             self.action_error = (
-                f"The CV could not be built: {error}. Check that the selection has at least one experience checked."
+                f"The CV could not be built: {readable(error)}. "
+                "Check that the selection has at least one experience checked."
             )
             self.generating = False
             return

@@ -13,6 +13,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
+from cv_generator.app.errors import as_sentence
 from cv_generator.models.profile import MasterProfile
 from cv_generator.services import achievements as achievement_operations
 from cv_generator.services.achievements import origin_of
@@ -232,7 +233,7 @@ class ExperienceState(rx.State):
             updated = operation(on_disk)
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
-            self.error = str(error)
+            self.error = as_sentence(error)
             # Nothing was saved, but the screen may be the stale one: after "That achievement
             # no longer exists" it would keep offering the row that fails.
             if on_disk is not None:

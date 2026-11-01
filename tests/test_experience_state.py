@@ -1,5 +1,6 @@
 """What the Work experience editor does when you click: drafts, errors, guards and focus."""
 
+import errno
 from pathlib import Path
 
 import pytest
@@ -171,13 +172,13 @@ def test_the_draft_of_an_achievement_deleted_elsewhere_is_dropped(editor: Experi
 
 def test_a_failed_move_shows_its_error_under_its_row(editor: ExperienceState, monkeypatch: pytest.MonkeyPatch) -> None:
     def full_disk(*_: object) -> None:
-        raise OSError("No space left on device")
+        raise OSError(errno.ENOSPC, "No space left on device", "/Users/someone/cv-generator/data/.profile.json.tmp")
 
     monkeypatch.setattr(experience_state, "save_profile", full_disk)
 
     run(ExperienceState.move, editor, TRIAGE, 1)
 
-    assert editor.error == "No space left on device"
+    assert editor.error == "Nothing was saved: the disk is full."
     assert editor.error_at == TRIAGE
 
 

@@ -15,6 +15,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
+from cv_generator.app.errors import as_sentence, readable
 from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.services import skills as skill_operations
 from cv_generator.services.photo import MAX_SIZE_BYTES, process_photo, set_photo
@@ -254,7 +255,7 @@ class ProfileState(rx.State):
             )
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
-            self.error_message = f"The profile could not be saved: {error}"
+            self.error_message = f"The profile could not be saved: {readable(error)}"
             self.saving = False
             return
 
@@ -279,7 +280,7 @@ class ProfileState(rx.State):
             updated = set_photo(on_disk, photo)
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
-            self.photo_error = str(error)
+            self.photo_error = as_sentence(error)
             return
 
         self.photo = photo or ""
@@ -306,7 +307,7 @@ class ProfileState(rx.State):
             data = await files[0].read(MAX_SIZE_BYTES + 1)
             photo = await asyncio.to_thread(process_photo, data)
         except (ValueError, OSError) as error:
-            self.photo_error = str(error)
+            self.photo_error = as_sentence(error)
             self.uploading_photo = False
             return
 
@@ -337,7 +338,7 @@ class ProfileState(rx.State):
             updated = operation(on_disk)
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
-            self.skills_error = str(error)
+            self.skills_error = as_sentence(error)
             return
 
         self.skills = _skill_rows(updated)

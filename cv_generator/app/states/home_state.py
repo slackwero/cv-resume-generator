@@ -8,6 +8,7 @@ from pathlib import Path
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
+from cv_generator.app.errors import readable
 from cv_generator.rendering.i18n import load_language
 from cv_generator.services.generation import rewrite_pdf
 from cv_generator.services.profile import (
@@ -189,7 +190,7 @@ class HomeState(rx.State):
         try:
             archive_cv(DATA_DIR, cv_id, archived=archived)
         except (KeyError, OSError) as error:
-            self.message = f"That CV could not be archived: {error}"
+            self.message = f"That CV could not be archived: {readable(error)}"
             return
         self._load_history()
 
@@ -215,7 +216,7 @@ class HomeState(rx.State):
         try:
             note_archive_reason(DATA_DIR, cv_id, reason)
         except (KeyError, OSError) as error:
-            self.message = f"The reason could not be saved: {error}"
+            self.message = f"The reason could not be saved: {readable(error)}"
             return
         self._load_history()
 
@@ -308,9 +309,9 @@ class HomeState(rx.State):
         except FileNotFoundError:
             self.message = "That CV's record was not found, so it cannot be rebuilt."
         except ValueError as error:
-            self.message = f"The PDF could not be rebuilt: {error}"
+            self.message = f"The PDF could not be rebuilt: {readable(error)}"
         except (OSError, KeyError, RuntimeError) as error:
-            self.message = f"The PDF could not be rebuilt: {error}"
+            self.message = f"The PDF could not be rebuilt: {readable(error)}"
         else:
             self.notice = f"Done: {target.name} is back in output/."
         self.regenerating = ""

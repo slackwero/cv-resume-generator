@@ -7,6 +7,7 @@ from pathlib import Path
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
+from cv_generator.app.errors import readable
 from cv_generator.importers.base import PartialPersonalInfo
 from cv_generator.importers.merge import Change, ChangeKind
 from cv_generator.models.profile import MasterProfile
@@ -167,7 +168,7 @@ class SyncState(rx.State):
         try:
             content = await files[0].read()
         except OSError as error:
-            self.error_message = f"The uploaded file could not be read: {error}"
+            self.error_message = f"The uploaded file could not be read: {readable(error)}"
             self.analyzing = False
             return
 
@@ -186,7 +187,7 @@ class SyncState(rx.State):
             on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
         except (ValueError, OSError) as error:
             # Returning, not raising: `process_file` frees the box once this is back.
-            self.error_message = f"Your profile could not be read, so nothing was compared: {error}"
+            self.error_message = f"Your profile could not be read, so nothing was compared: {readable(error)}"
             return
         self._compare_against(on_disk)
         # Without a profile it is compared against an empty one: everything imported comes out
@@ -201,7 +202,7 @@ class SyncState(rx.State):
                 if path.suffix.lower() == ".zip"
                 else "Check that it is the PDF LinkedIn generates with More > Save to PDF."
             )
-            self.error_message = f"The LinkedIn export could not be read: {error}. {hint_text}"
+            self.error_message = f"The LinkedIn export could not be read: {readable(error)}. {hint_text}"
             return
 
         self._changes = result.changes
@@ -351,7 +352,7 @@ class SyncState(rx.State):
                 detected_language=self.detected_language,
             )
         except (OSError, ValueError) as error:
-            self.error_message = f"The sync could not be applied and your profile was left intact: {error}"
+            self.error_message = f"The sync could not be applied and your profile was left intact: {readable(error)}"
             self.applying = False
             return
 
@@ -397,7 +398,7 @@ class SyncState(rx.State):
                 return
             profile = await asyncio.to_thread(restore_backup, DATA_DIR, self.backup_path)
         except (FileNotFoundError, ValueError, OSError) as error:
-            self.error_message = f"The backup could not be restored: {error}"
+            self.error_message = f"The backup could not be restored: {readable(error)}"
             self.undoing = False
             return
 
