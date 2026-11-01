@@ -29,6 +29,7 @@ _HTTP_TIMEOUT_SECONDS = 5
 _KILL_SETTLE_SECONDS = 2.0
 _REAP_SECONDS = 1.0
 _POLL_SECONDS = 1.0
+_EXIT_POLL_SECONDS = 0.25  # how long a Ctrl+C on Windows can go unanswered
 _WAIT_REPORT_SECONDS = 60
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -140,6 +141,23 @@ def wait_until_ready(
             on_wait(elapsed)
             next_report += _WAIT_REPORT_SECONDS
         time.sleep(min(_POLL_SECONDS, max(timeout - elapsed, 0)))
+
+
+def wait_for_exit(process: "subprocess.Popen[bytes]") -> int:
+    """Waits until the app exits and returns its exit code.
+
+    On Windows a plain `wait()` is one system call that Ctrl+C does not interrupt: Python
+    runs the handler only when the call returns, at the app's exit, and the app, in a
+    process group of its own, ignores that Ctrl+C. Short timed waits give the handler a turn
+    after each one. On POSIX a signal interrupts the plain wait already, so it stays.
+    """
+    if not _IS_WINDOWS:
+        return process.wait()
+    while True:
+        try:
+            return process.wait(timeout=_EXIT_POLL_SECONDS)
+        except subprocess.TimeoutExpired:
+            continue
 
 
 def stop_app(process: "subprocess.Popen[bytes]", grace: float = STOP_GRACE_SECONDS) -> None:

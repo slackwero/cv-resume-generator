@@ -15,12 +15,21 @@ Handler = Callable[[int, FrameType | None], object]
 
 
 class FakeProcess:
-    """Stands in for the app's process: `wait()` returns a code or raises."""
+    """Stands in for the app's process: `wait()` returns a code or raises.
 
-    def __init__(self, outcome: int | type[BaseException] = KeyboardInterrupt) -> None:
+    A timed wait first times out `running` times, as it does while the app runs.
+    """
+
+    def __init__(self, outcome: int | type[BaseException] = KeyboardInterrupt, running: int = 0) -> None:
         self.outcome = outcome
+        self.running = running
+        self.waits: list[float | None] = []
 
-    def wait(self) -> int:
+    def wait(self, timeout: float | None = None) -> int:
+        self.waits.append(timeout)
+        if timeout is not None and self.running:
+            self.running -= 1
+            raise subprocess.TimeoutExpired("app", timeout)
         if isinstance(self.outcome, int):
             return self.outcome
         raise self.outcome
@@ -295,6 +304,30 @@ def test_an_app_that_dies_is_reported(
 ) -> None:
     monkeypatch.setattr(app, "start_app", lambda command, folder, log: FakeProcess(1))
     assert main([], folder=tmp_path) == 1
+    assert "stopped unexpectedly" in capsys.readouterr().out
+
+
+def test_on_windows_ctrl_c_while_the_app_runs_stops_it(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Windows' plain wait would only let the Ctrl+C through once the app exited, which it never does."""
+    fake = FakeProcess(KeyboardInterrupt, running=3)
+    monkeypatch.setattr(app, "_IS_WINDOWS", True)
+    monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
+    assert main([], folder=tmp_path) == 0
+    assert None not in fake.waits
+    assert calls.stopped == [fake]
+    assert "CV Generator stopped." in capsys.readouterr().out
+
+
+def test_on_windows_an_app_that_dies_while_it_runs_is_reported(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = FakeProcess(1, running=3)
+    monkeypatch.setattr(app, "_IS_WINDOWS", True)
+    monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
+    assert main([], folder=tmp_path) == 1
+    assert None not in fake.waits
     assert "stopped unexpectedly" in capsys.readouterr().out
 
 

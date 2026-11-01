@@ -1,3 +1,4 @@
+import _thread
 import contextlib
 import os
 import signal
@@ -22,6 +23,7 @@ from launcher.app import (
     port_state,
     start_app,
     stop_app,
+    wait_for_exit,
     wait_until_ready,
 )
 
@@ -207,6 +209,63 @@ def test_not_ready_after_the_timeout(tmp_path: Path, log: TextIO) -> None:
         assert wait_until_ready(unused_port(), process, timeout=1) is False
         assert time.monotonic() - started < 5
     finally:
+        stop_app(process)
+
+
+class RunningApp:
+    """Stands in for the running app: a timed wait times out `running` times, then `outcome` happens."""
+
+    def __init__(self, outcome: int | type[BaseException], running: int = 3) -> None:
+        self.outcome = outcome
+        self.running = running
+        self.waits: list[float | None] = []
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.waits.append(timeout)
+        if timeout is not None and self.running:
+            self.running -= 1
+            raise subprocess.TimeoutExpired("app", timeout)
+        if isinstance(self.outcome, int):
+            return self.outcome
+        raise self.outcome
+
+
+def test_on_windows_the_wait_for_the_app_returns_its_exit_code_when_it_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", True)
+    running = RunningApp(3)
+    assert wait_for_exit(running) == 3
+    assert len(running.waits) == 4
+    # Short waits: Ctrl+C is only handled between two of them.
+    assert all(timeout is not None and timeout <= 1 for timeout in running.waits)
+
+
+def test_on_windows_ctrl_c_gets_through_the_wait_for_the_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", True)
+    running = RunningApp(KeyboardInterrupt)
+    with pytest.raises(KeyboardInterrupt):
+        wait_for_exit(running)
+    assert None not in running.waits
+
+
+def test_on_posix_the_wait_for_the_app_is_the_plain_wait_a_signal_interrupts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_module, "_IS_WINDOWS", False)
+    running = RunningApp(3)
+    assert wait_for_exit(running) == 3
+    assert running.waits == [None]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows' plain wait cannot be interrupted")
+def test_on_windows_ctrl_c_reaches_the_launcher_while_the_app_runs(tmp_path: Path, log: TextIO) -> None:
+    process = start_app([sys.executable, "-c", "import time; time.sleep(60)"], tmp_path, log)
+    ctrl_c = threading.Timer(0.5, _thread.interrupt_main)  # what a Ctrl+C in the console does to Python
+    try:
+        started = time.monotonic()
+        ctrl_c.start()
+        with pytest.raises(KeyboardInterrupt):
+            wait_for_exit(process)
+        assert time.monotonic() - started < 10
+    finally:
+        ctrl_c.cancel()
         stop_app(process)
 
 

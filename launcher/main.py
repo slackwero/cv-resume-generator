@@ -160,7 +160,7 @@ def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[su
         console.say(f"Open {url} in your browser.")
     console.say("To stop it, close this window or press Ctrl+C.")
 
-    process.wait()
+    app.wait_for_exit(process)
     started.clear()
     raise _Failure(f"CV Generator stopped unexpectedly. The details are in {log_path}.")
 
