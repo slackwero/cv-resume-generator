@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -28,6 +28,10 @@ jobs:
       - name: Install native libraries (macOS)
         if: runner.os == 'macOS'
         run: brew install pango
+      # The runner ships MSYS2; WeasyPrint 69 finds C:\msys64\mingw64\bin by itself, so no env var.
+      - name: Install native libraries (Windows)
+        if: runner.os == 'Windows'
+        run: C:\msys64\usr\bin\pacman.exe -S --noconfirm mingw-w64-x86_64-pango
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -39,7 +43,9 @@ jobs:
       # does not exit on SIGTERM, hence the SIGKILL after a short grace period.
       # The runner's own Node is moved out of the way first: the dev mode installs its own
       # bun, so this proves a machine without Node can run the app.
+      # Not on Windows: the launcher job smoke-tests the app there.
       - name: Smoke test the local-only protection
+        if: runner.os != 'Windows'
         run: |
           while p=$(command -v node); do sudo mv "$p" "$p.hidden"; done
           set -m
@@ -52,7 +58,7 @@ jobs:
           kill -KILL -- "-$app" 2>/dev/null || true
           exit "$rc"
       - name: Show the app log
-        if: failure()
+        if: failure() && runner.os != 'Windows'
         run: cat reflex.log || true
 
   # The launcher as a user meets it: the ZIP GitHub serves, unpacked into a folder whose path
