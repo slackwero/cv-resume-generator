@@ -55,7 +55,7 @@ if (-not $uv) {
     # to older TLS versions, hence the first statement.
     $installed = $false
     try {
-        & powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install-does-not-exist.ps1 | iex'
+        & powershell -NoProfile -ExecutionPolicy Bypass -Command '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex'
         $installed = $LASTEXITCODE -eq 0
     }
     catch {
