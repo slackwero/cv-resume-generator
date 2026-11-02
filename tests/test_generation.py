@@ -3,18 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from cv_generator.models.cv import JobPosting, SelectedExperience, Selection
+from cv_generator.models.cv import GeneratedCV, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
 from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.i18n import default_sections
 from cv_generator.services import generation
+from cv_generator.services.achievements import add_achievement_in
 from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv
+from cv_generator.services.translations import PROFESSION_KEY, save_translation, text_key
 from cv_generator.storage.history import (
     archive_cv,
     load_history,
     note_archive_reason,
     rebuild_history,
 )
+from tests.bilingual import sample_profile
 from tests.test_models_personal import REQUIRED
 from tests.test_photo import sample_photo
 
@@ -439,3 +442,52 @@ def test_a_blank_name_is_refused_and_nothing_changes(
 def test_renaming_a_cv_with_no_snapshot_fails(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         rename_cv(tmp_path / "data", "cv-ghost", "Acme")
+
+
+def _bilingual_selection(achievement_id: str = "ach-1") -> Selection:
+    return Selection(
+        experiences=[SelectedExperience(id="exp-1", achievements=[achievement_id])],
+        skills=["skill-1"],
+        sections=default_sections("es"),
+    )
+
+
+def _generate_in(tmp_path: Path, profile: MasterProfile, selection: Selection, language: str) -> GeneratedCV:
+    return generate_cv(
+        profile=profile,
+        selection=selection,
+        cv_name="Bilingual",
+        target_role="DevSecOps",
+        language=language,
+        template="modern",
+        data_dir=tmp_path / "data",
+        output_dir=tmp_path / "output",
+        created=CREATED,
+    )
+
+
+def test_a_spanish_cv_uses_the_spanish_content_and_falls_back_to_english(tmp_path: Path) -> None:
+    profile = save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Reduje el despliegue en 40%")
+    profile = save_translation(profile, "es", PROFESSION_KEY, "Ingeniera DevSecOps")
+
+    cv = _generate_in(tmp_path, profile, _bilingual_selection(), "es")
+
+    assert cv.content.experiences[0].achievements[0].text == "Reduje el despliegue en 40%"
+    assert cv.content.experiences[0].role == "Platform Engineer", "no Spanish role: falls back to English"
+    assert cv.content.personal.profession == "Ingeniera DevSecOps"
+    assert "translations" not in cv.content.model_dump()
+
+
+def test_an_empty_spanish_profession_prints_the_english_one(tmp_path: Path) -> None:
+    cv = _generate_in(tmp_path, sample_profile(), _bilingual_selection(), "es")
+
+    assert cv.content.personal.profession == "DevSecOps Engineer"
+
+
+def test_an_english_cv_prints_an_achievement_written_only_in_spanish_with_its_spanish(tmp_path: Path) -> None:
+    profile = add_achievement_in(sample_profile(), "exp-1", "Automaticé las revisiones", "es")
+    new_id = profile.experiences[0].achievements[-1].id
+
+    cv = _generate_in(tmp_path, profile, _bilingual_selection(new_id), "en")
+
+    assert cv.content.experiences[0].achievements[0].text == "Automaticé las revisiones"

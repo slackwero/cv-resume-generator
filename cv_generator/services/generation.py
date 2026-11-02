@@ -11,6 +11,7 @@ from cv_generator.models.cv import GeneratedCV, JobPosting, Selection
 from cv_generator.models.profile import MasterProfile
 from cv_generator.rendering.filename import build_filename, resolve_available_path
 from cv_generator.rendering.renderer import load_meta, render_pdf
+from cv_generator.services.translations import in_language
 from cv_generator.storage.history import cvs_dir, register_cv, rename_entry
 from cv_generator.storage.repo import read_json, save_json
 from cv_generator.tailoring.resolver import resolve_content
@@ -71,7 +72,8 @@ def generate_cv(
     The PDF never overwrites an earlier one: if the name already exists a suffix is
     added, because the history is only useful if what you sent is still there.
     """
-    content = resolve_content(profile, selection)
+    # The one place that guarantees a CV is built in its own language: every caller gets it.
+    content = resolve_content(in_language(profile, language), selection)
     # The snapshot is what was sent: a photo the template does not draw was not in the
     # PDF. The recipe still keeps that you asked for it, for when you clone it.
     if not load_meta(template).supports_photo:

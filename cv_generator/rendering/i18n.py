@@ -1,7 +1,7 @@
 """Labels per language: default section titles and month names.
 
-Only the template labels are translated. The user writes the CV content in whatever
-language they want; the application does not translate text.
+The template labels are translated here. The CV content is not: it comes from the two
+versions the profile keeps of each text, one per language.
 """
 
 import re
