@@ -116,6 +116,13 @@ def test_an_edit_of_a_current_english_changes_nothing_in_the_rules() -> None:
     assert after_source_edit(p, K, EN_TEXT) == p
 
 
+def test_an_unchanged_english_save_keeps_its_review() -> None:
+    p = save_translation(_with_spanish(), "es", K, "Redujo el despliegue en 40%")
+
+    assert _edit_source(p, EN_TEXT) == p
+    assert state_in(p, "en", K) is TextState.REVIEW
+
+
 def test_still_good_clears_a_review_on_either_side() -> None:
     spanish_in_review = _edit_source(_with_spanish(), "Cut deploy time by half")
     english_in_review = save_translation(_with_spanish(), "es", K, "Redujo el despliegue en 40%")

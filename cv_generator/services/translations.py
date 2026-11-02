@@ -220,6 +220,9 @@ def after_source_edit(profile: MasterProfile, key: str, previous: str) -> Master
     agrees with the new text; otherwise the edit leaves the other versions to be reviewed.
     """
     source = source_text_of(profile, key)
+    if source == previous:
+        # An unchanged save is no fix: only "Still good" resolves a review.
+        return profile
     translations = {code: dict(items) for code, items in profile.translations.items()}
     for items in translations.values():
         entry = items.get(key)
