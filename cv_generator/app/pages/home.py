@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from cv_generator.app.components.header import data_cell, data_group, legend_strip, page
+from cv_generator.app.components.header import data_cell, data_group, language_switch, legend_strip, page
 from cv_generator.app.components.history_table import history_table
 from cv_generator.app.components.profile_status import profile_status
 from cv_generator.app.states.home_state import HomeState
@@ -71,6 +71,7 @@ def home_page() -> rx.Component:
         history_table(),
         actions=_primary_action(),
         strip=legend_strip(profile_status()),
+        switch=language_switch(HomeState.language, HomeState.switch_language),
         data=data_group(
             data_cell("Rails", HomeState.history.length().to_string()),
             data_cell("Archived", HomeState.archived_total.to_string()),

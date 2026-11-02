@@ -8,8 +8,12 @@ from cv_generator.app.states import home_state
 from cv_generator.app.states.home_state import HomeState
 from cv_generator.models.cv import CVContent, GeneratedCV, Selection
 from cv_generator.services.generation import load_cv, save_cv
+from cv_generator.services.preferences import load_content_language, save_content_language
+from cv_generator.services.profile import save_profile
 from cv_generator.services.system import ViewerUnavailable
+from cv_generator.services.translations import save_translation, text_key
 from cv_generator.storage.history import register_cv
+from tests.bilingual import sample_profile
 from tests.screens import new_state, run
 from tests.test_models_personal import REQUIRED
 
@@ -195,3 +199,69 @@ def test_a_cv_whose_record_is_gone_cannot_be_renamed(screen_data: Path) -> None:
     run(HomeState.rename, state, cv_id, "Northwind, platform team")
 
     assert state.message == "That CV's record was not found, so its name cannot be changed."
+
+
+def _profile_on_disk() -> None:
+    save_profile(home_state.DATA_DIR, sample_profile())
+
+
+def test_home_opens_in_the_remembered_language() -> None:
+    _profile_on_disk()
+    save_content_language(home_state.DATA_DIR, "es")
+    state = new_state(HomeState)
+
+    run(HomeState.load, state)
+
+    assert state.language == "es"
+
+
+def test_home_opens_in_the_source_language_when_nothing_is_remembered() -> None:
+    _profile_on_disk()
+    state = new_state(HomeState)
+
+    run(HomeState.load, state)
+
+    assert state.language == sample_profile().source_language
+
+
+def test_switching_saves_the_language_and_recounts() -> None:
+    save_profile(home_state.DATA_DIR, save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Texto"))
+    state = new_state(HomeState)
+    run(HomeState.load, state)
+
+    run(HomeState.switch_language, state, "es")
+
+    assert state.language == "es"
+    assert state.pending_summary == "ES · 4 pending translation"
+    assert load_content_language(home_state.DATA_DIR) == "es"
+
+
+def test_nothing_pending_reads_so() -> None:
+    profile = sample_profile()
+    save_profile(home_state.DATA_DIR, profile)
+    state = new_state(HomeState)
+    run(HomeState.load, state)
+
+    run(HomeState.switch_language, state, profile.source_language)
+
+    assert state.pending_summary == f"{profile.source_language.upper()} · nothing pending"
+
+
+def test_an_unknown_language_is_ignored() -> None:
+    _profile_on_disk()
+    state = new_state(HomeState)
+    run(HomeState.load, state)
+    before = state.language
+
+    run(HomeState.switch_language, state, "xx")
+
+    assert state.language == before
+    assert load_content_language(home_state.DATA_DIR) is None
+
+
+def test_the_summary_is_empty_without_a_profile() -> None:
+    state = new_state(HomeState)
+
+    run(HomeState.load, state)
+
+    assert state.pending_summary == ""

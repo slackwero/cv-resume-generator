@@ -11,14 +11,16 @@ import reflex as rx
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
 from cv_generator.app.errors import pdf_not_written, readable, viewer_not_opened
 from cv_generator.app.focus import focus_on
-from cv_generator.rendering.i18n import load_language
+from cv_generator.rendering.i18n import available_languages, load_language
 from cv_generator.services.generation import rename_cv, rewrite_pdf
+from cv_generator.services.preferences import load_content_language, save_content_language, starting_language
 from cv_generator.services.profile import (
     load_profile,
     load_sync_status,
     pending_fields,
 )
 from cv_generator.services.system import ViewerUnavailable, open_with_viewer
+from cv_generator.services.translations import pending_totals
 from cv_generator.storage.history import archive_cv, load_history, note_archive_reason
 from cv_generator.text import normalize, plural
 
@@ -60,7 +62,9 @@ class HomeState(rx.State):
 
     synced: bool = False
     sync_detail: str = ""
-    content_language: str = ""
+    # The language the profile is shown in, and what is still pending in it.
+    language: str = ""
+    pending_summary: str = ""
 
     notices: list[str] = []
     message: str = ""
@@ -76,7 +80,12 @@ class HomeState(rx.State):
     def load(self) -> None:
         """Reads profile, sync status and history from disk."""
         self.message = ""
+        # Read on every open: a tab already open never changes behind the owner's back.
+        profile = load_profile(DATA_DIR)
+        source = profile.source_language if profile is not None else None
+        self.language = starting_language(load_content_language(DATA_DIR), source)
         self._load_profile()
+        self._load_pending()
         self._load_sync()
         self._load_history()
 
@@ -119,13 +128,31 @@ class HomeState(rx.State):
                 "Until you complete it in My profile, the CV will print 'PENDING' in its place."
             )
 
+    def _load_pending(self) -> None:
+        profile = load_profile(DATA_DIR)
+        if profile is None:
+            self.pending_summary = ""
+            return
+        missing, review = pending_totals(profile, self.language)
+        parts = [f"{count} pending {what}" for count, what in ((missing, "translation"), (review, "review")) if count]
+        code = self.language.upper()
+        self.pending_summary = f"{code} · {' · '.join(parts)}" if parts else f"{code} · nothing pending"
+
+    @rx.event
+    def switch_language(self, code: str) -> None:
+        """Shows the profile's pending work in another language and remembers the choice."""
+        if code not in available_languages():
+            return
+        self.language = code
+        save_content_language(DATA_DIR, code)
+        self._load_pending()
+
     def _load_sync(self) -> None:
         status = load_sync_status(DATA_DIR)
         self.synced = status is not None
 
         if status is None:
             self.sync_detail = "Never synced with LinkedIn"
-            self.content_language = ""
             return
 
         sources = {
@@ -137,7 +164,6 @@ class HomeState(rx.State):
             f"Synced from the {sources.get(status.source, status.source)} · "
             f"{_in_words(_days_since(status.timestamp))} · {imported}"
         )
-        self.content_language = status.detected_language
 
     def _load_history(self) -> None:
         entries = load_history(DATA_DIR)

@@ -105,11 +105,10 @@ def profile_status() -> rx.Component:
                 },
             ),
             rx.cond(
-                HomeState.content_language != "",
+                HomeState.pending_summary != "",
                 rx.el.div(
-                    legend("Content in ", color=TEXT_MUTED),
-                    legend(HomeState.content_language.upper(), color=AMBER),
-                    style={"display": "flex", "gap": "0.25rem", "margin_top": "0.375rem"},
+                    legend(HomeState.pending_summary, color=AMBER),
+                    style={"margin_top": "0.375rem"},
                 ),
                 rx.fragment(),
             ),

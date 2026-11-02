@@ -10,6 +10,8 @@ This world's composition law is three rules, and all three are applied here:
    which is the primary action.
 """
 
+from collections.abc import Callable
+
 import reflex as rx
 
 from cv_generator.app.styles import (
@@ -26,6 +28,7 @@ from cv_generator.app.styles import (
     style_legend,
     touch_target,
 )
+from cv_generator.rendering.i18n import available_languages
 
 # The contract of the chosen direction. It goes as an HTML comment inside the body
 # because it has to survive the production build and be auditable with grep against
@@ -198,7 +201,41 @@ def data_group(*cells: rx.Component) -> rx.Component:
     )
 
 
-def nav_bar(data: rx.Component | None = None) -> rx.Component:
+def language_switch(current: rx.Var, on_choose: Callable[[str], rx.event.EventSpec]) -> rx.Component:
+    """The ES/EN switch: which language of the profile's content the screen shows.
+
+    Plain buttons in the header's own voice. The current one carries `aria-pressed`, so a
+    screen reader hears the state that the amber only shows to those who can see it.
+    """
+    return rx.el.div(
+        *[
+            rx.el.button(
+                code.upper(),
+                id=f"content-language-{code}",
+                type="button",
+                aria_pressed=rx.cond(current == code, "true", "false"),
+                on_click=on_choose(code),
+                style={
+                    **style_legend(),
+                    **touch_target(),
+                    "padding": "0 0.75rem",
+                    "background": "transparent",
+                    "cursor": "pointer",
+                    "border": "none",
+                    "border_bottom": rx.cond(current == code, f"2px solid {AMBER}", "2px solid transparent"),
+                    "color": rx.cond(current == code, AMBER, TEXT_MUTED),
+                    "_hover": {"color": AMBER},
+                },
+            )
+            for code in available_languages()
+        ],
+        role="group",
+        aria_label="Content language",
+        style={"display": "flex", "gap": "0.25rem"},
+    )
+
+
+def nav_bar(data: rx.Component | None = None, switch: rx.Component | None = None) -> rx.Component:
     """Persistent bar, identical on the four routes."""
     return rx.el.header(
         rx.el.div(
@@ -217,6 +254,7 @@ def nav_bar(data: rx.Component | None = None) -> rx.Component:
                 },
             ),
             rx.el.div(style={"flex": "1 1 auto", "min_width": "0"}),
+            switch if switch is not None else rx.fragment(),
             data if data is not None else rx.fragment(),
             style={
                 "display": "flex",
@@ -265,15 +303,17 @@ def page(
     actions: rx.Component | None = None,
     strip: rx.Component | None = None,
     data: rx.Component | None = None,
+    switch: rx.Component | None = None,
 ) -> rx.Component:
     """Frame of a route.
 
     The title always goes in the same corner and in the headline voice; the actions on
-    the right. `strip` is the legend column; `data` the framed group in the bar.
+    the right. `strip` is the legend column; `data` the framed group in the bar and `switch`
+    the content language switch, just before it.
     """
     return rx.fragment(
         address_contract(),
-        nav_bar(data),
+        nav_bar(data, switch),
         rx.el.main(
             rx.el.div(
                 rx.el.div(
