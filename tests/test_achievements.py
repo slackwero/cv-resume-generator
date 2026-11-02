@@ -14,6 +14,7 @@ from cv_generator.services.achievements import (
     add_achievement_in,
     duplicate_achievement,
     edit_achievement,
+    edit_achievement_in,
     move_achievement,
     origin_of,
     remove_achievement,
@@ -322,3 +323,29 @@ def test_restoring_the_linkedin_text_puts_the_spanish_in_review() -> None:
     result = restore_linkedin_text(agreed, "exp-1", "ach-1")
 
     assert state_in(result, "es", text_key("ach-1", "text")) is TextState.REVIEW
+
+
+def test_editing_in_spanish_saves_the_translation_only() -> None:
+    result = edit_achievement_in(sample_profile(), "exp-1", "ach-1", " Reduje el tiempo ", "es")
+
+    key = text_key("ach-1", "text")
+    assert result.experiences[0].achievements[0].text == "Cut deploy time by 40%"
+    assert text_in(result, "es", key) == "Reduje el tiempo"
+    assert state_in(result, "es", key) is TextState.CURRENT
+
+
+def test_editing_in_the_source_language_is_a_plain_edit() -> None:
+    result = edit_achievement_in(sample_profile(), "exp-1", "ach-1", "Cut it by half", "en")
+
+    assert result.experiences[0].achievements[0].text == "Cut it by half"
+    assert result.translations == {}
+
+
+def test_editing_in_spanish_rejects_empty_text_and_unknown_items() -> None:
+    """Empty, an achievement added in Spanish would be written in neither language."""
+    with pytest.raises(ValueError, match="cannot be empty"):
+        edit_achievement_in(sample_profile(), "exp-1", "ach-1", "  ", "es")
+    with pytest.raises(ValueError, match="job no longer exists"):
+        edit_achievement_in(sample_profile(), "exp-gone", "ach-1", "Hola", "es")
+    with pytest.raises(ValueError, match="achievement no longer exists"):
+        edit_achievement_in(sample_profile(), "exp-1", "ach-gone", "Hola", "es")

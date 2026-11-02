@@ -201,11 +201,15 @@ def data_group(*cells: rx.Component) -> rx.Component:
     )
 
 
-def language_switch(current: rx.Var, on_choose: Callable[[str], rx.event.EventSpec]) -> rx.Component:
+def language_switch(
+    current: rx.Var,
+    on_choose: Callable[[str], rx.event.EventSpec | list[rx.event.EventSpec | rx.event.EventHandler]],
+) -> rx.Component:
     """The ES/EN switch: which language of the profile's content the screen shows.
 
     Plain buttons in the header's own voice. The current one carries `aria-pressed`, so a
     screen reader hears the state that the amber only shows to those who can see it.
+    `on_choose(code)` gives what a click runs: one event, or several in order.
     """
     return rx.el.div(
         *[

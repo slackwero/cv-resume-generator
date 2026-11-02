@@ -28,6 +28,7 @@ from cv_generator.app.components.translation_field import (
     version_actions,
 )
 from cv_generator.app.components.work_experience import work_experience
+from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
 from cv_generator.app.styles import (
     AMBER,
@@ -767,7 +768,13 @@ def profile_page() -> rx.Component:
         _error_notice(ProfileState.language_error, margin_top="0"),
         rx.cond(ProfileState.has_profile, _form(), _without_profile()),
         strip=rx.cond(ProfileState.has_profile, legend_strip(_strip()), rx.fragment()),
-        switch=language_switch(ProfileState.language, ProfileState.switch_language),
+        # One click: My profile switches and remembers the language, then the Work
+        # experience follows it. Wired here and not in `switch_language`: ExperienceState
+        # imports ProfileState, so ProfileState cannot import it back.
+        switch=language_switch(
+            ProfileState.language,
+            lambda code: [ProfileState.switch_language(code), ExperienceState.show_language],
+        ),
         data=data_group(
             data_cell(
                 "Status",

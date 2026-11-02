@@ -6,13 +6,23 @@ Each achievement wears a tag that says where it stands against LinkedIn:
     Edited     outlined, amber    you rewrote it; "LinkedIn says" keeps the original
     Yours      solid amber        you wrote it, or it is a copy: the sync never touches it
 
-The tag is a word and not only a tone, the same law as the rails. The role, company and
-dates of a job are read-only: they come from LinkedIn.
+The tag is a word and not only a tone, the same law as the rails. It describes the text
+LinkedIn feeds, so it shows in that language only; in the other one the achievement wears
+its pending mark, if any (see `translation_field`).
+
+The company and dates of a job are read-only: they come from LinkedIn. So are its role
+and location in the language LinkedIn feeds; in the other one they are translated here.
 """
 
 import reflex as rx
 
-from cv_generator.app.states.experience_state import ExperienceState
+from cv_generator.app.components.translation_field import (
+    pending_mark,
+    reference_line,
+    translation_field,
+    version_actions,
+)
+from cv_generator.app.states.experience_state import JOB_FIELDS, ExperienceState
 from cv_generator.app.styles import (
     AMBER,
     RULE_LINE,
@@ -111,7 +121,9 @@ def _job(row: rx.Var) -> rx.Component:
     """The job's heading, which folds and unfolds its achievements.
 
     It is one button with `aria-expanded`, so the screen reader says whether the list
-    below is open. The details are not editable: there is no field to click into.
+    below is open. Nothing in it is editable: where the role and location can be
+    translated, their fields go below it (`_job_texts`). While folded, the role's pending
+    mark goes next to the role, so a text standing in for it is marked even then.
     """
     opened = ExperienceState.open_jobs[row["experience_id"]]
     return rx.el.button(
@@ -122,16 +134,19 @@ def _job(row: rx.Var) -> rx.Component:
         ),
         rx.el.span(
             rx.el.span(
-                row["role"],
-                style={
-                    "font_stretch": "75%",
-                    "font_weight": "700",
-                    "font_size": "0.9375rem",
-                    "text_transform": "uppercase",
-                    "letter_spacing": "0.03em",
-                    "color": TEXT,
-                    "display": "block",
-                },
+                rx.el.span(
+                    row["role"]["text"],
+                    style={
+                        "font_stretch": "75%",
+                        "font_weight": "700",
+                        "font_size": "0.9375rem",
+                        "text_transform": "uppercase",
+                        "letter_spacing": "0.03em",
+                        "color": TEXT,
+                    },
+                ),
+                rx.cond(opened, rx.fragment(), pending_mark(row["role"]["state"])),
+                style={"display": "flex", "align_items": "center", "gap": "0.5rem", "flex_wrap": "wrap"},
             ),
             rx.el.span(
                 legend(row["company"] + " · " + row["dates"]),
@@ -163,7 +178,43 @@ def _job(row: rx.Var) -> rx.Component:
     )
 
 
+def _job_texts(row: rx.Var) -> rx.Component:
+    """The role and location of an unfolded job, in the language on screen.
+
+    Short texts: "Use the same text" copies the source one.
+    """
+    return rx.el.div(
+        *[
+            translation_field(
+                row[field],
+                on_save=ExperienceState.save_job_field,
+                on_submit=ExperienceState.job_field_from_form,
+                on_confirm=ExperienceState.confirm_job_field,
+                on_same=ExperienceState.same_job_field,
+            )
+            for field in JOB_FIELDS
+        ],
+        _row_error(row),
+        style={
+            "display": "flex",
+            "flex_direction": "column",
+            "gap": "0.75rem",
+            "padding": "0.75rem 0 0.75rem 1.5rem",
+            "border_bottom": f"1px solid {RULE_LINE}",
+        },
+    )
+
+
 # --- Achievement -----------------------------------------------------------------
+
+
+def _marks(row: rx.Var) -> rx.Component:
+    """Where the achievement stands: against LinkedIn in the language it feeds, and
+    against the other language in either one."""
+    return rx.fragment(
+        rx.cond(ExperienceState.in_source, _origin_tag(row["origin"]), rx.fragment()),
+        pending_mark(row["state"]),
+    )
 
 
 def _move_button(direction: str, label: str, offset: int, row: rx.Var, *, disabled: rx.Var) -> rx.Component:
@@ -253,19 +304,32 @@ def _achievement(row: rx.Var) -> rx.Component:
         ),
         rx.el.div(
             rx.el.div(
-                _origin_tag(row["origin"]),
+                _marks(row),
                 rx.el.p(
                     row["text"],
                     style={
                         "font_stretch": "100%",
                         "font_size": "0.875rem",
                         "line_height": "1.55",
-                        "color": TEXT,
+                        # The other language's text, standing in, reads fainter; its mark says why.
+                        "color": rx.cond(row["state"] == "missing", TEXT_FAINT, TEXT),
                         "min_width": "0",
                         "overflow_wrap": "break-word",
                     },
                 ),
-                style={"display": "flex", "align_items": "baseline", "gap": "0.625rem"},
+                style={"display": "flex", "align_items": "baseline", "gap": "0.625rem", "flex_wrap": "wrap"},
+            ),
+            rx.cond(
+                row["state"] != "",
+                rx.el.div(
+                    reference_line(row["reference_language"], row["reference"]),
+                    # Long texts are translated, not copied: no "Use the same text" here.
+                    version_actions(
+                        can_confirm=row["state"] == "review", on_confirm=ExperienceState.confirm(row["key"])
+                    ),
+                    style={"display": "flex", "flex_direction": "column", "gap": "0.375rem", "margin_top": "0.25rem"},
+                ),
+                rx.fragment(),
             ),
             _draft_note(row["key"], "You have an unsaved change here. Press Edit to finish it."),
             rx.cond(confirming, _confirmation(row), _row_error(row)),
@@ -286,15 +350,27 @@ def _achievement(row: rx.Var) -> rx.Component:
 
 
 def _editor(row: rx.Var) -> rx.Component:
-    """The achievement opened in place, with LinkedIn's text below when it has one.
+    """The achievement opened in place, in the language on screen.
 
-    A rejected save leaves it open with what you typed, so you can fix it.
+    It starts from this language's own text: empty while it is missing, with the other
+    language's below as the reference. In the language LinkedIn feeds, LinkedIn's text
+    goes below too, when it has one. A rejected save leaves it open with what you typed,
+    so you can fix it.
     """
     return _form_box(
-        rx.el.div(_origin_tag(row["origin"]), style={"display": "flex", "margin_bottom": "0.5rem"}),
-        _textarea(row["key"], row["text"], aria_label="Achievement text"),
         rx.cond(
-            row["linkedin_text"] != "",
+            ExperienceState.in_source | (row["state"] != ""),
+            rx.el.div(_marks(row), style={"display": "flex", "gap": "0.5rem", "margin_bottom": "0.5rem"}),
+            rx.fragment(),
+        ),
+        _textarea(row["key"], row["own"], aria_label="Achievement text"),
+        rx.cond(
+            row["reference"] != "",
+            rx.el.div(reference_line(row["reference_language"], row["reference"]), style={"margin_top": "0.375rem"}),
+            rx.fragment(),
+        ),
+        rx.cond(
+            ExperienceState.in_source & (row["linkedin_text"] != ""),
             note_text(
                 "LinkedIn says: " + row["linkedin_text"],
                 style={"display": "block", "margin_top": "0.375rem"},
@@ -306,7 +382,7 @@ def _editor(row: rx.Var) -> rx.Component:
             "Save",
             ExperienceState.cancel_edit,
             rx.cond(
-                row["origin"] == "edited",
+                ExperienceState.in_source & (row["origin"] == "edited"),
                 secondary_button(
                     "Restore LinkedIn text",
                     type="button",
@@ -359,7 +435,7 @@ def _row(row: rx.Var) -> rx.Component:
     return rx.fragment(
         rx.match(
             row["row"],
-            ("job", _job(row)),
+            ("job", rx.fragment(_job(row), rx.cond(opened, _job_texts(row), rx.fragment()))),
             (
                 "achievement",
                 rx.cond(

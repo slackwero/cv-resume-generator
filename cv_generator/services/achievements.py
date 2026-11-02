@@ -100,6 +100,25 @@ def edit_achievement(profile: MasterProfile, experience_id: str, achievement_id:
     return after_source_edit(result, text_key(achievement.id, "text"), previous)
 
 
+def edit_achievement_in(
+    profile: MasterProfile, experience_id: str, achievement_id: str, text: str, language: str
+) -> MasterProfile:
+    """Changes the text of an achievement in `language`.
+
+    In the other language it saves that language's translation and leaves the source text
+    as it is. An empty text is refused there too: an achievement added in that language
+    has no source text, and would be left written in neither.
+
+    Raises:
+        ValueError: if the text is empty or the job or achievement does not exist.
+    """
+    if language == profile.source_language:
+        return edit_achievement(profile, experience_id, achievement_id, text)
+    clean = _valid_text(text)
+    _index_of(_experience_in(profile, experience_id), achievement_id)
+    return save_translation(profile, language, text_key(achievement_id, "text"), clean)
+
+
 def restore_linkedin_text(profile: MasterProfile, experience_id: str, achievement_id: str) -> MasterProfile:
     """Puts back the text LinkedIn gave for this achievement.
 
