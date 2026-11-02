@@ -265,3 +265,21 @@ def test_the_summary_is_empty_without_a_profile() -> None:
     run(HomeState.load, state)
 
     assert state.pending_summary == ""
+
+
+def test_a_language_that_cannot_be_saved_is_still_shown_and_the_failure_is_said(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_profile(home_state.DATA_DIR, save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Texto"))
+    state = new_state(HomeState)
+    run(HomeState.load, state)
+
+    def full(data_dir: Path, language: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(home_state, "save_content_language", full)
+    run(HomeState.switch_language, state, "es")
+
+    assert state.language == "es"
+    assert state.pending_summary == "ES · 4 pending translation"
+    assert state.message.startswith("The language could not be remembered:")

@@ -143,8 +143,14 @@ class HomeState(rx.State):
         """Shows the profile's pending work in another language and remembers the choice."""
         if code not in available_languages():
             return
+        self.message = ""
+        # The switch stays applied in memory even when the choice cannot be saved: the page
+        # still shows what was asked for, and the message says it will not be remembered.
         self.language = code
-        save_content_language(DATA_DIR, code)
+        try:
+            save_content_language(DATA_DIR, code)
+        except OSError as error:
+            self.message = f"The language could not be remembered: {readable(error)}"
         self._load_pending()
 
     def _load_sync(self) -> None:
