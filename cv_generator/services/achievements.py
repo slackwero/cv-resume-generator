@@ -8,6 +8,7 @@ profile and does not touch the one it receives, just like the skills.
 from enum import StrEnum
 
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
+from cv_generator.services.translations import after_source_edit, copy_item, drop_item, save_translation, text_key
 from cv_generator.text import normalize
 
 
@@ -63,6 +64,26 @@ def add_achievement(profile: MasterProfile, experience_id: str, text: str) -> Ma
     return result
 
 
+def add_achievement_in(profile: MasterProfile, experience_id: str, text: str, language: str) -> MasterProfile:
+    """Appends an achievement written in `language`.
+
+    In the other language the source text stays empty (pending) and the text is saved as
+    that language's translation.
+
+    Raises:
+        ValueError: if the text is empty or the job does not exist.
+    """
+    if language == profile.source_language:
+        return add_achievement(profile, experience_id, text)
+    clean = _valid_text(text)
+    _experience_in(profile, experience_id)
+
+    result = profile.model_copy(deep=True)
+    created = Achievement(text="")
+    _experience_in(result, experience_id).achievements.append(created)
+    return save_translation(result, language, text_key(created.id, "text"), clean)
+
+
 def edit_achievement(profile: MasterProfile, experience_id: str, achievement_id: str, text: str) -> MasterProfile:
     """Changes the text while keeping the id, the LinkedIn origin and the copy link.
 
@@ -73,8 +94,10 @@ def edit_achievement(profile: MasterProfile, experience_id: str, achievement_id:
     index = _index_of(_experience_in(profile, experience_id), achievement_id)
 
     result = profile.model_copy(deep=True)
-    _experience_in(result, experience_id).achievements[index].text = clean
-    return result
+    achievement = _experience_in(result, experience_id).achievements[index]
+    previous = achievement.text
+    achievement.text = clean
+    return after_source_edit(result, text_key(achievement.id, "text"), previous)
 
 
 def restore_linkedin_text(profile: MasterProfile, experience_id: str, achievement_id: str) -> MasterProfile:
@@ -90,8 +113,10 @@ def restore_linkedin_text(profile: MasterProfile, experience_id: str, achievemen
         raise ValueError("This achievement did not come from LinkedIn.")
 
     result = profile.model_copy(deep=True)
-    _experience_in(result, experience_id).achievements[index].text = imported
-    return result
+    achievement = _experience_in(result, experience_id).achievements[index]
+    previous = achievement.text
+    achievement.text = imported
+    return after_source_edit(result, text_key(achievement.id, "text"), previous)
 
 
 def duplicate_achievement(profile: MasterProfile, experience_id: str, achievement_id: str) -> MasterProfile:
@@ -107,8 +132,10 @@ def duplicate_achievement(profile: MasterProfile, experience_id: str, achievemen
     result = profile.model_copy(deep=True)
     achievements = _experience_in(result, experience_id).achievements
     original = achievements[index]
-    achievements.insert(index + 1, Achievement(text=original.text, copy_of=original.id))
-    return result
+    copy = Achievement(text=original.text, copy_of=original.id)
+    achievements.insert(index + 1, copy)
+    # The copy carries both versions and their states, so it can be reworded in either.
+    return copy_item(result, original.id, copy.id)
 
 
 def remove_achievement(profile: MasterProfile, experience_id: str, achievement_id: str) -> MasterProfile:
@@ -132,7 +159,7 @@ def remove_achievement(profile: MasterProfile, experience_id: str, achievement_i
     for achievement in experience.achievements:
         if achievement.copy_of == removed.id:
             achievement.copy_of = removed.copy_of
-    return result
+    return drop_item(result, removed.id)
 
 
 def move_achievement(profile: MasterProfile, experience_id: str, achievement_id: str, offset: int) -> MasterProfile:

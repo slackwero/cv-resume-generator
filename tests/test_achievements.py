@@ -11,6 +11,7 @@ from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.services.achievements import (
     AchievementOrigin,
     add_achievement,
+    add_achievement_in,
     duplicate_achievement,
     edit_achievement,
     move_achievement,
@@ -18,6 +19,8 @@ from cv_generator.services.achievements import (
     remove_achievement,
     restore_linkedin_text,
 )
+from cv_generator.services.translations import TextState, save_translation, state_in, text_in, text_key
+from tests.bilingual import sample_profile
 from tests.test_models_personal import REQUIRED
 
 
@@ -254,3 +257,68 @@ def test_an_unknown_job_raises_a_clear_error(profile: MasterProfile, operation: 
 def test_an_unknown_achievement_raises_a_clear_error(profile: MasterProfile, operation: Callable) -> None:
     with pytest.raises(ValueError, match="achievement no longer exists"):
         operation(profile, "achievement-gone")
+
+
+def _with_spanish() -> MasterProfile:
+    return save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Reduje el tiempo de despliegue un 40%")
+
+
+def test_duplicating_copies_both_languages() -> None:
+    result = duplicate_achievement(_with_spanish(), "exp-1", "ach-1")
+
+    copy_id = result.experiences[0].achievements[1].id
+    key = text_key(copy_id, "text")
+    assert text_in(result, "es", key) == "Reduje el tiempo de despliegue un 40%"
+    assert state_in(result, "es", key) is TextState.CURRENT
+    assert result.translations["es"][key] == result.translations["es"][text_key("ach-1", "text")]
+
+
+def test_deleting_drops_the_translation() -> None:
+    result = remove_achievement(_with_spanish(), "exp-1", "ach-1")
+
+    assert not any(key.startswith("ach-1") for items in result.translations.values() for key in items)
+
+
+def test_adding_in_spanish_leaves_the_english_pending() -> None:
+    result = add_achievement_in(sample_profile(), "exp-1", " Automaticé los escaneos ", "es")
+
+    created = result.experiences[0].achievements[-1]
+    key = text_key(created.id, "text")
+    assert created.text == ""
+    assert state_in(result, "es", key) is TextState.CURRENT
+    assert text_in(result, "es", key) == "Automaticé los escaneos"
+    assert state_in(result, "en", key) is TextState.MISSING
+
+
+def test_adding_in_the_source_language_is_a_plain_add() -> None:
+    result = add_achievement_in(sample_profile(), "exp-1", "Cut costs", "en")
+
+    assert result.experiences[0].achievements[-1].text == "Cut costs"
+    assert result.translations == {}
+
+
+def test_adding_in_spanish_rejects_empty_text_and_unknown_job() -> None:
+    with pytest.raises(ValueError, match="cannot be empty"):
+        add_achievement_in(sample_profile(), "exp-1", "  ", "es")
+    with pytest.raises(ValueError, match="job no longer exists"):
+        add_achievement_in(sample_profile(), "exp-gone", "Hola", "es")
+
+
+def test_editing_the_english_of_a_spanish_only_achievement_makes_both_current() -> None:
+    added = add_achievement_in(sample_profile(), "exp-1", "Automaticé los escaneos", "es")
+    created = added.experiences[0].achievements[-1]
+
+    result = edit_achievement(added, "exp-1", created.id, "Automated the scans")
+
+    key = text_key(created.id, "text")
+    assert state_in(result, "en", key) is TextState.CURRENT
+    assert state_in(result, "es", key) is TextState.CURRENT
+
+
+def test_restoring_the_linkedin_text_puts_the_spanish_in_review() -> None:
+    agreed = save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Reduje el tiempo")
+    agreed.experiences[0].achievements[0].imported_value = "Cut deploy time in half"
+
+    result = restore_linkedin_text(agreed, "exp-1", "ach-1")
+
+    assert state_in(result, "es", text_key("ach-1", "text")) is TextState.REVIEW

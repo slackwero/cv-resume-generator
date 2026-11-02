@@ -9,6 +9,8 @@ import pytest
 
 from cv_generator.models.profile import MasterProfile, Skill
 from cv_generator.services.skills import add_skill, remove_skill, rename_skill
+from cv_generator.services.translations import TextState, save_translation, state_in, text_key
+from tests.bilingual import sample_profile
 from tests.test_models_personal import REQUIRED
 
 
@@ -143,3 +145,19 @@ def test_remove_does_not_repeat_a_dismissed_one(profile: MasterProfile) -> None:
 def test_removing_a_missing_one_fails(profile: MasterProfile) -> None:
     with pytest.raises(ValueError, match="does not exist"):
         remove_skill(profile, "skill-missing")
+
+
+def test_renaming_a_skill_puts_its_spanish_name_in_review() -> None:
+    translated = save_translation(sample_profile(), "es", text_key("skill-1", "name"), "Kubernetes ES")
+
+    result = rename_skill(translated, "skill-1", "K8s")
+
+    assert state_in(result, "es", text_key("skill-1", "name")) is TextState.REVIEW
+
+
+def test_removing_a_skill_drops_its_translation() -> None:
+    translated = save_translation(sample_profile(), "es", text_key("skill-1", "name"), "Kubernetes ES")
+
+    result = remove_skill(translated, "skill-1")
+
+    assert result.translations == {}

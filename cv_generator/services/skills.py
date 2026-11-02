@@ -6,6 +6,7 @@ like the sync.
 """
 
 from cv_generator.models.profile import MasterProfile, Skill
+from cv_generator.services.translations import after_source_edit, drop_item, text_key
 from cv_generator.text import normalize
 
 
@@ -65,9 +66,10 @@ def rename_skill(profile: MasterProfile, skill_id: str, name: str) -> MasterProf
 
     result = profile.model_copy(deep=True)
     skill = result.skills[index]
+    previous = skill.name
     skill.imported_value = skill.imported_value or skill.name
     skill.name = clean
-    return result
+    return after_source_edit(result, text_key(skill.id, "name"), previous)
 
 
 def remove_skill(profile: MasterProfile, skill_id: str) -> MasterProfile:
@@ -85,4 +87,4 @@ def remove_skill(profile: MasterProfile, skill_id: str) -> MasterProfile:
     remembered = removed.imported_value or removed.name
     if all(normalize(dismissed) != normalize(remembered) for dismissed in result.dismissed_skills):
         result.dismissed_skills.append(remembered)
-    return result
+    return drop_item(result, removed.id)
