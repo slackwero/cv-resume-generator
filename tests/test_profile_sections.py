@@ -8,15 +8,30 @@ from pathlib import Path
 
 import pytest
 
+from cv_generator.app.components.translation_field import translation_field
 from cv_generator.app.pages.profile import _field
-from cv_generator.app.states.profile_state import ProfileState, requested_section
+from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState, requested_section
 from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.services.profile import load_profile, save_profile
 from tests.screens import new_state, run
 from tests.test_models_personal import REQUIRED
 
 
-@pytest.mark.parametrize("name", ["contact", "photo", "skills", "experience"])
+def test_the_menu_lists_the_subsections_in_order() -> None:
+    """The texts LinkedIn writes sit next to the ones that edit them in the CV's order."""
+    assert list(PROFILE_SECTIONS) == [
+        "contact",
+        "photo",
+        "presentation",
+        "experience",
+        "education",
+        "skills",
+        "languages",
+        "courses",
+    ]
+
+
+@pytest.mark.parametrize("name", list(PROFILE_SECTIONS))
 def test_a_known_section_is_opened(name: str) -> None:
     assert requested_section(name) == name
 
@@ -109,3 +124,19 @@ def test_a_contact_field_buffers_what_you_type(field: str, kind: str) -> None:
     assert "DebounceInput" in rendered
     assert f'"profile-{field}"' in rendered
     assert f'"{kind}"' in rendered
+
+
+def test_a_translation_field_says_its_state_and_its_actions_in_words() -> None:
+    """The marks carry text, never a color alone, and the reference names its language."""
+    field = translation_field(
+        ProfileState.skills[0]["category"],
+        on_save=ProfileState.save_skill_field,
+        on_submit=ProfileState.skill_field_from_form,
+        on_confirm=ProfileState.confirm_skill_field,
+        on_same=ProfileState.same_skill_field,
+    )
+
+    rendered = str(field.render())
+
+    for words in ("Pending translation", "Pending review", "Still good", "Use the same text", '"In "'):
+        assert words in rendered

@@ -11,11 +11,22 @@ the field without resorting to color:
 The distinction matters. An empty optional field is not a problem and must not alarm;
 an empty required field is a normal left untied, and it is the only reason a PDF comes
 out with 'PENDING' printed inside.
+
+The switch in the top bar sets the language every subsection is shown and edited in. In
+the other language the profession is not required: left empty, the CV prints the
+source one, and its link says so.
 """
 
 import reflex as rx
 
-from cv_generator.app.components.header import data_cell, data_group, legend_strip, page
+from cv_generator.app.components.header import data_cell, data_group, language_switch, legend_strip, page
+from cv_generator.app.components.translation_field import (
+    pending_mark,
+    reference_line,
+    translation_field,
+    translation_notes,
+    version_actions,
+)
 from cv_generator.app.components.work_experience import work_experience
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
 from cv_generator.app.styles import (
@@ -53,7 +64,10 @@ def _field(
     label: str,
     value: rx.Var,
     *,
-    required: bool = False,
+    required: bool | rx.Var = False,
+    when_unused: str | rx.Var = "Not used",
+    mark: rx.Component | None = None,
+    notes: rx.Component | None = None,
     hint: str = "",
     kind: str = "text",
     placeholder: str = "",
@@ -62,22 +76,24 @@ def _field(
 
     The label is a real `<label for>` and not loose text above the input: that way the
     screen reader announces the field and clicking the label moves the focus inside.
+    `required` may be a Var, for the profession, which is required in one language only;
+    `when_unused` is what an empty field that is not required says. `mark` goes next to
+    the label and `notes` right under the field.
     """
     field_id = f"profile-{field}"
     filled = value != ""
-    # `required` is a Python bool, not a Var: it is resolved at build time.
-    when_empty = BROKEN if required else GAP
     return rx.el.div(
         rx.el.div(
             rx.el.label(label, html_for=field_id, style=style_legend(TEXT_FAINT)),
+            mark if mark is not None else rx.fragment(),
             rx.el.div(style={"flex": "1 1 auto"}),
             rail(
-                rx.cond(filled, JOINED, when_empty),
+                rx.cond(filled, JOINED, rx.cond(required, BROKEN, GAP)),
                 style={"max_width": "2.75rem", "flex": "0 0 auto"},
             ),
             legend(
-                rx.cond(filled, "Tied", "Untied" if required else "Not used"),
-                color=rx.cond(filled, TEXT_MUTED, AMBER if required else TEXT_MUTED),
+                rx.cond(filled, "Tied", rx.cond(required, "Untied", when_unused)),
+                color=rx.cond(filled, TEXT_MUTED, rx.cond(required, AMBER, TEXT_MUTED)),
             ),
             style={"display": "flex", "align_items": "center", "gap": "0.5rem", "margin_bottom": "0.375rem"},
         ),
@@ -95,6 +111,7 @@ def _field(
                 style={**field_style(), **touch_target()},
             ),
         ),
+        notes if notes is not None else rx.fragment(),
         rx.cond(
             hint != "",
             rx.el.p(
@@ -125,6 +142,28 @@ def _grid(*children: rx.Component) -> rx.Component:
     )
 
 
+def _profession_notes() -> rx.Component:
+    """The other language's profession while this one is pending, and what to do with it.
+
+    "Still good" saves right away; "Use the same text" only fills the field, and Save
+    writes it with the rest of the form.
+    """
+    return rx.cond(
+        ProfileState.profession_state != "",
+        rx.el.div(
+            reference_line(ProfileState.reference_language, ProfileState.profession_reference),
+            version_actions(
+                can_confirm=ProfileState.profession_state == "review",
+                on_confirm=ProfileState.confirm_profession,
+                can_copy=~ProfileState.profession_required,
+                on_same=ProfileState.use_same_profession,
+            ),
+            style={"display": "flex", "flex_direction": "column", "gap": "0.375rem", "margin_top": "0.375rem"},
+        ),
+        rx.fragment(),
+    )
+
+
 def _required() -> rx.Component:
     return panel(
         legend("What the CV needs", color=AMBER),
@@ -147,7 +186,11 @@ def _required() -> rx.Component:
                 "profession",
                 "Profession",
                 ProfileState.profession,
-                required=True,
+                required=ProfileState.profession_required,
+                # Empty in the other language, the CV prints the source one.
+                when_unused="Uses " + ProfileState.reference_language,
+                mark=pending_mark(ProfileState.profession_state),
+                notes=_profession_notes(),
                 placeholder="DevSecOps Engineer",
                 hint="It appears under your name. In each CV you can change it just for that application.",
             ),
@@ -329,35 +372,58 @@ def _photo() -> rx.Component:
     )
 
 
+def _skill_field(skill: rx.Var, field: str) -> rx.Component:
+    """A skill's category or level: read-only in the source language, translatable in the
+    other one when the source has text."""
+    return translation_field(
+        skill[field],
+        on_save=ProfileState.save_skill_field,
+        on_submit=ProfileState.skill_field_from_form,
+        on_confirm=ProfileState.confirm_skill_field,
+        on_same=ProfileState.same_skill_field,
+    )
+
+
 def _skill_row(skill: rx.Var) -> rx.Component:
-    """A skill editable in place.
+    """A skill editable in place, in the language on screen.
 
     It saves when leaving the field or on Enter, like the history's archive reason:
     without `value=` the field governs itself and does not write to disk on every keystroke.
+    A name missing in the other language shows the source one, unmarked: most skill names
+    read the same in both.
     """
-    return rx.el.form(
-        rx.el.input(type="hidden", name="id", value=skill["id"]),
-        rx.el.input(
-            name="name",
-            default_value=skill["name"],
-            on_blur=lambda name: ProfileState.rename_skill(skill["id"], name),
-            aria_label="Skill name " + skill["name"],
-            style={**field_style(), **touch_target(), "flex": "1 1 auto", "min_width": "0"},
+    name = skill["name"]
+    return rx.el.div(
+        rx.el.form(
+            rx.el.input(type="hidden", name="id", value=name["id"]),
+            rx.el.input(
+                name="name",
+                default_value=name["text"],
+                on_blur=lambda text: ProfileState.rename_skill(name["id"], text),
+                aria_label="Skill name " + name["text"],
+                style={**field_style(), **touch_target(), "flex": "1 1 auto", "min_width": "0"},
+            ),
+            secondary_button(
+                rx.icon("trash_2", size=14, stroke_width=1.75),
+                type="button",
+                on_click=ProfileState.remove_skill(name["id"]),
+                aria_label="Remove " + name["text"],
+                title="Remove " + name["text"],
+                # At the height of the field next to it, on desktop too.
+                style={"min_height": "2.75rem", "min_width": "2.75rem", "padding": "0"},
+            ),
+            # The id travels in a hidden field: Reflex compiles the `on_submit` outside the
+            # `foreach`, and a reference to `skill` there blows up in the browser when pressing Enter.
+            on_submit=ProfileState.rename_from_form,
+            # The name shown is in the key, so a switch of language draws the field again.
+            key=name["id"] + "-" + name["text"] + "-" + ProfileState.skills_version.to_string(),
+            style={"display": "flex", "align_items": "center", "gap": "0.5rem", "width": "100%"},
         ),
-        secondary_button(
-            rx.icon("trash_2", size=14, stroke_width=1.75),
-            type="button",
-            on_click=ProfileState.remove_skill(skill["id"]),
-            aria_label="Remove " + skill["name"],
-            title="Remove " + skill["name"],
-            # At the height of the field next to it, on desktop too.
-            style={"min_height": "2.75rem", "min_width": "2.75rem", "padding": "0"},
-        ),
-        # The id travels in a hidden field: Reflex compiles the `on_submit` outside the
-        # `foreach`, and a reference to `skill` there blows up in the browser when pressing Enter.
-        on_submit=ProfileState.rename_from_form,
-        key=skill["id"] + "-" + ProfileState.skills_version.to_string(),
-        style={"display": "flex", "align_items": "center", "gap": "0.5rem", "width": "100%"},
+        translation_notes(name, on_confirm=ProfileState.confirm_skill_field, on_same=ProfileState.same_skill_field),
+        _skill_field(skill, "category"),
+        _skill_field(skill, "level"),
+        key=name["id"],
+        style={"display": "flex", "flex_direction": "column", "gap": "0.375rem", "width": "100%"},
     )
 
 
@@ -421,6 +487,15 @@ def _skills() -> rx.Component:
     )
 
 
+def _texts(name: str) -> rx.Component:
+    """A subsection of the texts only LinkedIn writes, in the language on screen."""
+    return panel(
+        legend(PROFILE_SECTIONS[name], color=AMBER),
+        note_text("Nothing here came from LinkedIn.", style={"display": "block", "margin_top": "0.75rem"}),
+        style={"width": "100%", "padding": "1.5rem"},
+    )
+
+
 def _without_profile() -> rx.Component:
     """Empty state: it says what the real next step is, not just that there is nothing."""
     return rx.el.div(
@@ -475,7 +550,10 @@ def _contact() -> rx.Component:
             ),
             rx.cond(
                 ProfileState.has_unsaved_changes & ~ProfileState.saving,
-                note_text("You have changes that are not saved yet.", color=AMBER),
+                note_text(
+                    "You have changes in " + ProfileState.unsaved_languages + " that are not saved yet.",
+                    color=AMBER,
+                ),
                 rx.fragment(),
             ),
             style={
@@ -504,13 +582,38 @@ def _contact() -> rx.Component:
 
 
 def _unsaved_mark() -> rx.Component:
-    """The dot on Contact while it holds changes not saved, seen from any subsection."""
+    """The dot on Contact while it holds changes not saved, seen from any subsection. It
+    names the languages that hold them: the profession has one version in each."""
     return rx.cond(
         ProfileState.has_unsaved_changes,
         rx.el.span(
             rx.el.span("●", aria_hidden="true", style={"color": AMBER, "margin_left": "0.5rem"}),
-            rx.el.span(" (not saved)", style=VISUALLY_HIDDEN),
-            title="Changes not saved yet",
+            rx.el.span(" (not saved in " + ProfileState.unsaved_languages + ")", style=VISUALLY_HIDDEN),
+            title="Unsaved changes in " + ProfileState.unsaved_languages,
+        ),
+        rx.fragment(),
+    )
+
+
+def _pending_count(name: str) -> rx.Component:
+    """How many texts of the subsection are pending in the language on screen: a figure
+    for the eye, words for the screen reader. Nothing when there are none."""
+    count = ProfileState.section_counts[name]
+    return rx.cond(
+        count != "",
+        rx.el.span(
+            rx.el.span(
+                count,
+                aria_hidden="true",
+                style={
+                    "margin_left": "0.5rem",
+                    "padding": "0 0.375rem",
+                    "border": f"1px solid {RULE_LINE_STRONG}",
+                    "color": TEXT_FAINT,
+                },
+            ),
+            rx.el.span(" (" + count + " pending)", style=VISUALLY_HIDDEN),
+            title=count + " pending translation or review",
         ),
         rx.fragment(),
     )
@@ -523,6 +626,7 @@ def _section_item(name: str, label: str) -> rx.Component:
     return rx.el.button(
         label,
         _unsaved_mark() if name == "contact" else rx.fragment(),
+        _pending_count(name),
         type="button",
         on_click=ProfileState.show_section(name),
         aria_current=rx.cond(current, "true", ""),
@@ -549,7 +653,8 @@ def _section_item(name: str, label: str) -> rx.Component:
 
 
 def _side_menu() -> rx.Component:
-    """The four subsections. On a narrow window the entries wrap above the content."""
+    """The subsections, each with what is pending in it. On a narrow window the entries
+    wrap above the content."""
     return rx.el.nav(
         *[_section_item(name, label) for name, label in PROFILE_SECTIONS.items()],
         aria_label="Profile sections",
@@ -572,8 +677,12 @@ def _form() -> rx.Component:
             rx.match(
                 ProfileState.section,
                 ("photo", _photo()),
-                ("skills", _skills()),
+                ("presentation", _texts("presentation")),
                 ("experience", work_experience()),
+                ("education", _texts("education")),
+                ("skills", _skills()),
+                ("languages", _texts("languages")),
+                ("courses", _texts("courses")),
                 _contact(),
             ),
             style={"flex": "1 1 auto", "min_width": "0"},
@@ -648,14 +757,16 @@ def _direction(status: str, title: str, explanation: str) -> rx.Component:
 
 
 def profile_page() -> rx.Component:
-    """Editing of the master profile, in four subsections: contact, photo, skills and the
-    achievements of each job."""
+    """Editing of the master profile by subsection, in the language of the switch."""
     return page(
         "My profile",
         "Your contact details, your photo, your skills and the achievements of each job. "
         "The jobs themselves come in and are updated from the LinkedIn sync.",
+        # Above the subsections, so it is seen from whichever one is open.
+        _error_notice(ProfileState.language_error, margin_top="0"),
         rx.cond(ProfileState.has_profile, _form(), _without_profile()),
         strip=rx.cond(ProfileState.has_profile, legend_strip(_strip()), rx.fragment()),
+        switch=language_switch(ProfileState.language, ProfileState.switch_language),
         data=data_group(
             data_cell(
                 "Status",
