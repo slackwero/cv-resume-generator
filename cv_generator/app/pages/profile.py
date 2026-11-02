@@ -155,7 +155,7 @@ def _profession_notes() -> rx.Component:
             version_actions(
                 can_confirm=ProfileState.profession_state == "review",
                 on_confirm=ProfileState.confirm_profession,
-                can_copy=~ProfileState.profession_required,
+                can_copy=ProfileState.profession_copyable,
                 on_same=ProfileState.use_same_profession,
             ),
             style={"display": "flex", "flex_direction": "column", "gap": "0.375rem", "margin_top": "0.375rem"},
@@ -187,7 +187,8 @@ def _required() -> rx.Component:
                 "Profession",
                 ProfileState.profession,
                 required=ProfileState.profession_required,
-                # Empty in the other language, the CV prints the source one.
+                # Not required only in the other language with a source profession, which
+                # the CV prints while the field is empty.
                 when_unused="Uses " + ProfileState.reference_language,
                 mark=pending_mark(ProfileState.profession_state),
                 notes=_profession_notes(),

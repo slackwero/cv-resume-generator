@@ -167,6 +167,9 @@ class ProfileState(rx.State):
     source_language: str = ""
     # Why the switch could not be remembered. It is shown above every subsection.
     language_error: str = ""
+    # Set while the last switch could not be remembered: the file still holds the
+    # language before it, so `start` must not read it back.
+    _switch_not_remembered: bool = False
     # Pending texts of each subsection in `language`, as text: "" when there are none.
     section_counts: dict[str, str] = dict.fromkeys(PROFILE_SECTIONS, "")
 
@@ -191,6 +194,9 @@ class ProfileState(rx.State):
     # the other language's text beside it while it is pending.
     profession_state: str = ""
     profession_reference: str = ""
+    # The source profession is empty or still the importer's placeholder: a translation
+    # left empty would print 'PENDING', so the other language has to have one.
+    source_profession_empty: bool = False
 
     # The already processed photo, as a data URI: the same string that goes into the CV's `src`.
     photo: str = ""
@@ -209,14 +215,16 @@ class ProfileState(rx.State):
         """Loads the profile from disk and fills the form with the personal details."""
         self.section = requested_section(self.router.url.query_parameters.get("section", ""))
         self.error_message = ""
-        self.language_error = ""
         self.saved = False
 
         profile = load_profile(DATA_DIR)
         self.has_profile = profile is not None
         # Read on every open, like Home: the remembered language is the one a page opens in.
-        source = profile.source_language if profile is not None else None
-        self._move_to(starting_language(load_content_language(DATA_DIR), source))
+        # Not after a switch that could not be remembered: every click in the menu runs
+        # this, and reading the file would undo that switch and hide why.
+        if not self._switch_not_remembered:
+            source = profile.source_language if profile is not None else None
+            self._move_to(starting_language(load_content_language(DATA_DIR), source))
         if profile is None:
             return
 
@@ -269,6 +277,7 @@ class ProfileState(rx.State):
         version = text_version(profile, self.language, PROFESSION_KEY)
         self.profession_state = version["state"]
         self.profession_reference = _without_placeholder(version["reference"])
+        self.source_profession_empty = not _without_placeholder(profile.personal.profession)
 
     def _count(self, profile: MasterProfile) -> None:
         counts = pending_by_section(profile, self.language)
@@ -295,6 +304,7 @@ class ProfileState(rx.State):
         self.error_message = ""
         self.skills_error = ""
         self.language_error = ""
+        self._switch_not_remembered = False
         self.saved = False
         self._move_to(code)
         # Like Home: the switch stays applied in memory even when the choice cannot be
@@ -303,6 +313,7 @@ class ProfileState(rx.State):
             save_content_language(DATA_DIR, code)
         except OSError as error:
             self.language_error = f"The language could not be remembered: {readable(error)}"
+            self._switch_not_remembered = True
         profile = load_profile(DATA_DIR)
         if profile is not None:
             self._read(profile)
@@ -334,8 +345,14 @@ class ProfileState(rx.State):
 
     @rx.var
     def profession_required(self) -> bool:
-        """Only in the source language: an empty translation prints the source profession."""
-        return self.language == self.source_language
+        """In the source language, always. In the other one only while the source profession
+        is empty or the placeholder: otherwise an empty translation prints the source one."""
+        return self.language == self.source_language or self.source_profession_empty
+
+    @rx.var
+    def profession_copyable(self) -> bool:
+        """Whether "Use the same text" has a source profession to copy."""
+        return self.language != self.source_language and not self.source_profession_empty
 
     @rx.var
     def reference_language(self) -> str:
@@ -351,7 +368,7 @@ class ProfileState(rx.State):
             "phone": self.phone,
             "email": self.email,
         }
-        if self.language == self.source_language:
+        if self.profession_required:
             values["profession"] = self.profession
         return [label for field, label in FIELD_LABELS.items() if field in values and not values[field].strip()]
 
@@ -482,12 +499,12 @@ class ProfileState(rx.State):
     def use_same_profession(self) -> None:
         """ "Use the same text": fills the profession with the source one. Save writes it,
         like anything typed."""
-        if self.language == self.source_language:
-            return
         profile = load_profile(DATA_DIR)
-        if profile is None:
+        source = _without_placeholder(profile.personal.profession) if profile is not None else ""
+        # The placeholder is not a profession: there is nothing to copy.
+        if self.language == self.source_language or not source:
             return
-        self.profession = _without_placeholder(profile.personal.profession)
+        self.profession = source
         self.saved = False
 
     # ------------------------------------------------------------------- photo

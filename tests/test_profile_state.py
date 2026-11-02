@@ -13,7 +13,7 @@ from cv_generator.app.states import profile_state
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
 from cv_generator.models.profile import MasterProfile, Skill, Translation
 from cv_generator.services.preferences import load_content_language, save_content_language
-from cv_generator.services.profile import load_profile, save_profile
+from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile
 from cv_generator.services.translations import PROFESSION_KEY, TextState, save_translation, state_in, text_key
 from tests.bilingual import sample_profile
 from tests.screens import new_state, run
@@ -62,6 +62,8 @@ def test_contact_in_spanish_saves_only_the_spanish_profession(screen_data: Path)
     assert state.profession_state == "missing"
     assert state.profession_reference == ENGLISH_PROFESSION
     assert state.section_counts["contact"] == "1"
+    assert not state.profession_required
+    assert state.profession_copyable
 
     run(ProfileState.update, state, "profession", f" {SPANISH_PROFESSION} ")
     run(ProfileState.save, state)
@@ -99,6 +101,29 @@ def test_an_empty_english_profession_still_blocks_saving(screen_data: Path) -> N
 
     assert state.missing == ["Profession"]
     assert not state.can_save
+
+
+def test_a_placeholder_english_profession_makes_the_spanish_one_required(screen_data: Path) -> None:
+    """The importer leaves 'PENDING' where LinkedIn brought no profession. Left empty, the
+    Spanish CV would fall back to it, so the Spanish one is required and nothing is copied."""
+    sample = sample_profile()
+    pending = sample.model_copy(update={"personal": sample.personal.model_copy(update={"profession": PENDING_FIELD})})
+    state = _screen(screen_data, pending, "es")
+
+    assert state.profession_required
+    assert state.missing == ["Profession"]
+    assert not state.can_save
+    assert not state.profession_copyable
+    run(ProfileState.use_same_profession, state)
+    assert state.profession == ""
+
+    run(ProfileState.update, state, "profession", SPANISH_PROFESSION)
+    run(ProfileState.save, state)
+
+    profile = _on_disk(screen_data)
+    assert state.saved
+    assert profile.personal.profession == PENDING_FIELD
+    assert profile.translations["es"][PROFESSION_KEY].text == SPANISH_PROFESSION
 
 
 def test_typing_in_english_and_switching_never_saves_it_as_spanish(screen_data: Path) -> None:
@@ -200,6 +225,34 @@ def test_a_language_that_cannot_be_remembered_is_still_shown_and_the_failure_is_
     assert state.language == "es"
     assert state.profession_state == "missing"
     assert state.language_error == "The language could not be remembered: the disk is full"
+
+
+def test_a_switch_that_could_not_be_remembered_survives_opening_a_subsection(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A click in the menu runs `start` again. It keeps the language and the message
+    instead of going back to the language still remembered on disk."""
+    state = _screen(screen_data, sample_profile())
+
+    def full(data_dir: Path, language: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(profile_state, "save_content_language", full)
+    run(ProfileState.switch_language, state, "es")
+
+    run(ProfileState.start, state)
+
+    assert state.language == "es"
+    assert state.profession_state == "missing"
+    assert state.language_error == "The language could not be remembered: the disk is full"
+
+    # Once a switch is remembered again, opening a subsection reads the file as before.
+    monkeypatch.setattr(profile_state, "save_content_language", save_content_language)
+    run(ProfileState.switch_language, state, "es")
+    assert state.language_error == ""
+    save_content_language(screen_data, "en")
+    run(ProfileState.start, state)
+    assert state.language == "en"
 
 
 def test_an_unknown_language_is_ignored(screen_data: Path) -> None:
