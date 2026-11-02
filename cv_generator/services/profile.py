@@ -82,15 +82,37 @@ def pending_fields(profile: MasterProfile) -> list[str]:
 
 
 def load_profile(data_dir: Path) -> MasterProfile | None:
-    """Returns the master profile, or None if none was created yet."""
+    """Returns the master profile, or None if none was created yet.
+
+    A profile saved before the bilingual content comes back upgraded in memory: the file
+    is only rewritten by the next save.
+    """
     path = data_dir / PROFILE_FILE
-    return MasterProfile.model_validate(read_json(path)) if path.is_file() else None
+    if not path.is_file():
+        return None
+
+    profile = MasterProfile.model_validate(read_json(path))
+    if profile.source_language is None:
+        # LinkedIn fed the profile in the language of the last sync; never synced means
+        # the profile was typed in by hand, in English.
+        status = load_sync_status(data_dir)
+        profile.source_language = status.detected_language if status else "en"
+    profile.schema_version = 2
+    return profile
 
 
 def save_profile(data_dir: Path, profile: MasterProfile) -> None:
-    """Persists the master profile."""
+    """Persists the master profile.
+
+    The first save over a profile from before schema 2 keeps a copy of it: the upgrade
+    adds fields an older version of the app would drop.
+    """
     data_dir.mkdir(parents=True, exist_ok=True)
-    save_json(data_dir / PROFILE_FILE, profile.model_dump(mode="json"))
+    path = data_dir / PROFILE_FILE
+    # Read the file, not the profile: the profile was already upgraded in memory.
+    if path.is_file() and read_json(path).get("schema_version", 1) < 2:
+        backup_profile(data_dir, datetime.now())
+    save_json(path, profile.model_copy(update={"schema_version": 2}).model_dump(mode="json"))
 
 
 def with_personal(profile: MasterProfile, personal: PersonalInfo) -> MasterProfile:

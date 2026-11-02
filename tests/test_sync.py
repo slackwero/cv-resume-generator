@@ -243,6 +243,7 @@ def test_the_first_sync_backs_up_nothing_because_there_was_no_profile(tmp_path: 
 
 def _synced_profile() -> MasterProfile:
     return MasterProfile(
+        source_language="en",
         personal=REQUIRED,
         experiences=[
             Experience(

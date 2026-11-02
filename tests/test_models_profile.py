@@ -60,7 +60,7 @@ def test_a_new_master_profile_requires_only_personal_info() -> None:
 
     assert profile.experiences == []
     assert profile.skills == []
-    assert profile.schema_version == 1
+    assert profile.schema_version == 2
 
 
 def test_master_profile_survives_a_json_round_trip() -> None:
@@ -108,3 +108,45 @@ def test_a_profile_saved_before_editing_loads_with_empty_defaults() -> None:
 
     assert experience.dismissed_achievements == []
     assert experience.achievements[0].copy_of is None
+
+
+def test_an_achievement_can_exist_only_in_the_other_language() -> None:
+    assert Achievement(text="  ").text == ""
+
+
+def test_a_version_1_profile_validates_without_the_new_fields() -> None:
+    profile = MasterProfile.model_validate({"schema_version": 1, "personal": REQUIRED})
+
+    assert profile.translations == {}
+    assert profile.source_language is None
+
+
+def test_a_snapshot_without_the_new_fields_still_loads() -> None:
+    from cv_generator.models.cv import GeneratedCV
+
+    old = {
+        "schema_version": 1,
+        "cv_id": "cv-old",
+        "created": "2026-03-15T10:30:00",
+        "cv_name": "An older CV",
+        "target_role": "DevSecOps",
+        "language": "es",
+        "template": "modern",
+        "pdf_file": "output/old.pdf",
+        "selection": {},
+        "content": {
+            "personal": REQUIRED,
+            "experiences": [
+                {
+                    "company": "Acme",
+                    "role": "Engineer",
+                    "start": "2020-01",
+                    "achievements": [{"text": "Cut deployment time"}],
+                }
+            ],
+        },
+    }
+
+    cv = GeneratedCV.model_validate(old)
+
+    assert cv.content.experiences[0].achievements[0].text == "Cut deployment time"

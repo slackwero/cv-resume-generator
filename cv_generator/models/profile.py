@@ -69,7 +69,10 @@ class Achievement(BaseModel):
     """A single achievement of a work experience, written once and reusable."""
 
     id: str = Field(default_factory=_generate_id("achievement"))
-    text: RequiredText
+
+    # Empty only for an achievement written in the other language alone: its text then
+    # lives in `MasterProfile.translations`, and the source language has nothing yet.
+    text: Annotated[str, StringConstraints(strip_whitespace=True)] = ""
 
     # The text as it came from LinkedIn the last time. Comparing `text` against this
     # field is what tells "I edited it" apart from "it changed on LinkedIn" when syncing.
@@ -171,6 +174,20 @@ class Reference(BaseModel):
     email: str | None = None
 
 
+class Translation(BaseModel):
+    """One item's text in the language that is not the source language."""
+
+    text: RequiredText
+
+    # The source text this version was written or last confirmed against. When the source
+    # text moves away from it, this version may be stale.
+    source_text: str
+
+    # This version's text when both last agreed. It is set only after this version changed
+    # on its own since, and then the source version is the one pending review.
+    agreed_text: str | None = None
+
+
 class MasterProfile(BaseModel):
     """Everything the user knows about themselves, with no presentation decisions.
 
@@ -178,7 +195,11 @@ class MasterProfile(BaseModel):
     user edits it; no CV modifies it.
     """
 
-    schema_version: int = 1
+    schema_version: int = 2
+
+    # The language LinkedIn feeds, so what the importers write is always in it. None only
+    # in a profile saved before this field existed; loading fills it in.
+    source_language: str | None = None
     personal: PersonalInfo
     profile_texts: list[ProfileText] = Field(default_factory=list)
     experiences: list[Experience] = Field(default_factory=list)
@@ -192,3 +213,7 @@ class MasterProfile(BaseModel):
     # Skills you removed by hand. Syncing never deletes, but it cannot give you back what
     # you removed either: without this list, LinkedIn would propose it again.
     dismissed_skills: list[str] = Field(default_factory=list)
+
+    # The other language, language -> item key -> translation. It lives apart from the
+    # items so `CVContent` and the history snapshots keep their plain shape.
+    translations: dict[str, dict[str, Translation]] = Field(default_factory=dict)

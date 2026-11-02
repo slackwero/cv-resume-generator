@@ -1,9 +1,11 @@
+import json
 from datetime import datetime
 from pathlib import Path
 
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, PersonalInfo
 from cv_generator.services.profile import (
     SyncStatus,
+    available_backups,
     load_profile,
     load_sync_status,
     save_profile,
@@ -98,3 +100,41 @@ def test_saving_the_contact_details_does_not_touch_the_given_profile() -> None:
     with_personal(on_disk, PersonalInfo(**{**REQUIRED, "first_name": "Janet"}))
 
     assert on_disk.model_dump() == before
+
+
+def _write_v1_profile(data_dir: Path) -> None:
+    (data_dir / "profile.json").write_text(json.dumps({"schema_version": 1, "personal": REQUIRED}))
+
+
+def test_an_old_profile_takes_its_source_language_from_the_last_sync(tmp_path: Path) -> None:
+    _write_v1_profile(tmp_path)
+    save_sync_status(tmp_path, SyncStatus(source="zip", timestamp=datetime(2026, 11, 1), detected_language="es"))
+
+    profile = load_profile(tmp_path)
+
+    assert profile is not None
+    assert profile.source_language == "es"
+    assert profile.schema_version == 2
+
+
+def test_an_old_profile_never_synced_is_english(tmp_path: Path) -> None:
+    _write_v1_profile(tmp_path)
+
+    profile = load_profile(tmp_path)
+
+    assert profile is not None
+    assert profile.source_language == "en"
+
+
+def test_the_first_save_over_an_old_profile_backs_it_up_once(tmp_path: Path) -> None:
+    _write_v1_profile(tmp_path)
+    profile = load_profile(tmp_path)
+    assert profile is not None
+
+    save_profile(tmp_path, profile)
+    save_profile(tmp_path, profile)
+
+    backups = available_backups(tmp_path)
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text())["schema_version"] == 1
+    assert json.loads((tmp_path / "profile.json").read_text())["schema_version"] == 2
