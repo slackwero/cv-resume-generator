@@ -18,6 +18,7 @@ from cv_generator.services.sync import (
     apply_sync,
     create_initial_profile,
     empty_profile,
+    language_mismatch,
     preselection,
     profile_unchanged,
     summary_by_kind,
@@ -203,6 +204,11 @@ class SyncState(rx.State):
                 else "Check that it is the PDF LinkedIn generates with More > Save to PDF."
             )
             self.error_message = f"The LinkedIn export could not be read: {readable(error)}. {hint_text}"
+            return
+
+        mismatch = language_mismatch(self._profile, result.detected_language)
+        if mismatch:
+            self.error_message = mismatch
             return
 
         self._changes = result.changes

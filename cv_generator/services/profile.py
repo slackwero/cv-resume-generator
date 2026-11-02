@@ -71,7 +71,7 @@ def restore_backup(data_dir: Path, name: str) -> MasterProfile:
     if origin is None:
         raise FileNotFoundError(f"the backup {name!r} does not exist")
 
-    profile = MasterProfile.model_validate(read_json(origin))
+    profile = _upgraded(data_dir, MasterProfile.model_validate(read_json(origin)))
     save_profile(data_dir, profile)
     return profile
 
@@ -79,6 +79,17 @@ def restore_backup(data_dir: Path, name: str) -> MasterProfile:
 def pending_fields(profile: MasterProfile) -> list[str]:
     """Required fields that still hold the placeholder and must be completed by hand."""
     return [field for field in REQUIRED_PERSONAL_FIELDS if getattr(profile.personal, field, "") == PENDING_FIELD]
+
+
+def _upgraded(data_dir: Path, profile: MasterProfile) -> MasterProfile:
+    """The profile as schema 2, in memory; the file is only rewritten by a save."""
+    if profile.source_language is None:
+        # LinkedIn fed the profile in the language of the last sync; never synced means
+        # the profile was typed in by hand, in English.
+        status = load_sync_status(data_dir)
+        profile.source_language = status.detected_language if status else "en"
+    profile.schema_version = 2
+    return profile
 
 
 def load_profile(data_dir: Path) -> MasterProfile | None:
@@ -91,14 +102,7 @@ def load_profile(data_dir: Path) -> MasterProfile | None:
     if not path.is_file():
         return None
 
-    profile = MasterProfile.model_validate(read_json(path))
-    if profile.source_language is None:
-        # LinkedIn fed the profile in the language of the last sync; never synced means
-        # the profile was typed in by hand, in English.
-        status = load_sync_status(data_dir)
-        profile.source_language = status.detected_language if status else "en"
-    profile.schema_version = 2
-    return profile
+    return _upgraded(data_dir, MasterProfile.model_validate(read_json(path)))
 
 
 def save_profile(data_dir: Path, profile: MasterProfile) -> None:

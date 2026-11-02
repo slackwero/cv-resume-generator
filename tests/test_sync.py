@@ -7,16 +7,20 @@ import pytest
 from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.merge import Change, ChangeKind, compute_diff
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
-from cv_generator.services.achievements import edit_achievement
-from cv_generator.services.profile import load_profile, load_sync_status, save_profile
+from cv_generator.services.achievements import add_achievement_in, edit_achievement
+from cv_generator.services.profile import load_profile, load_sync_status, restore_backup, save_profile
 from cv_generator.services.sync import (
     analyze_file,
     analyze_pdf,
     apply_sync,
+    create_initial_profile,
+    language_mismatch,
     preselection,
     profile_unchanged,
     summary_by_kind,
 )
+from cv_generator.services.translations import TextState, save_translation, state_in, text_key
+from tests.bilingual import sample_profile
 from tests.test_models_personal import REQUIRED
 
 FIXTURE_TEXT = Path(__file__).parent / "fixtures" / "linkedin_profile.txt"
@@ -282,3 +286,125 @@ def test_no_profile_before_and_none_now_is_unchanged() -> None:
 
 def test_a_profile_created_in_the_meantime_is_a_change() -> None:
     assert not profile_unchanged(None, _synced_profile())
+
+
+# ------------------------------------------------- sync feeds the source language only
+
+
+def _draft_with(*achievements: Achievement) -> ProfileDraft:
+    return ProfileDraft(
+        personal=PartialPersonalInfo(),
+        experiences=[
+            Experience(
+                company="Acme Airlines", role="Platform Engineer", start="2022-03", achievements=list(achievements)
+            )
+        ],
+    )
+
+
+def _sync(profile: MasterProfile, draft: ProfileDraft, data_dir: Path, language: str = "en") -> MasterProfile:
+    """The real path: diff, accept what is preselected, apply."""
+    changes = compute_diff(profile, draft)
+    return apply_sync(
+        profile=profile,
+        changes=changes,
+        accepted_items=preselection(changes),
+        data_dir=data_dir,
+        source="linkedin_pdf",
+        detected_language=language,
+    ).profile
+
+
+def test_a_linkedin_change_puts_the_spanish_of_that_achievement_in_review(tmp_path: Path) -> None:
+    profile = sample_profile()
+    profile.experiences[0].achievements[0].imported_value = "Cut deploy time by 40%"
+    profile = save_translation(profile, "es", text_key("ach-1", "text"), "Redujo el tiempo de despliegue un 40%")
+    assert state_in(profile, "es", text_key("ach-1", "text")) is TextState.CURRENT
+
+    draft = _draft_with(Achievement(text="Cut deploy time by 55%", imported_value="Cut deploy time by 55%"))
+    synced = _sync(profile, draft, tmp_path)
+
+    assert synced.experiences[0].achievements[0].text == "Cut deploy time by 55%"
+    assert state_in(synced, "es", text_key("ach-1", "text")) is TextState.REVIEW
+
+
+def test_achievements_new_from_linkedin_arrive_pending_translation(tmp_path: Path) -> None:
+    profile = sample_profile()
+    profile.experiences[0].achievements[0].imported_value = "Cut deploy time by 40%"
+    draft = _draft_with(
+        Achievement(text="Cut deploy time by 40%", imported_value="Cut deploy time by 40%"),
+        Achievement(text="Led the SAST rollout", imported_value="Led the SAST rollout"),
+    )
+
+    synced = _sync(profile, draft, tmp_path)
+
+    new = next(a for a in synced.experiences[0].achievements if a.text == "Led the SAST rollout")
+    assert state_in(synced, "es", text_key(new.id, "text")) is TextState.MISSING
+
+
+def test_an_achievement_written_only_in_spanish_is_never_matched_by_the_sync(tmp_path: Path) -> None:
+    profile = sample_profile()
+    profile.experiences[0].achievements[0].imported_value = "Cut deploy time by 40%"
+    profile = add_achievement_in(profile, "exp-1", "Escribí esto solo en español", "es")
+    only_spanish = next(a for a in profile.experiences[0].achievements if a.id != "ach-1")
+    key = text_key(only_spanish.id, "text")
+    kept = profile.translations["es"][key].model_copy()
+
+    draft = _draft_with(Achievement(text="Cut deploy time by 40%", imported_value="Cut deploy time by 40%"))
+    changes = compute_diff(profile, draft)
+    synced = _sync(profile, draft, tmp_path)
+
+    assert all(change.target_id != only_spanish.id for change in changes)
+    assert synced.translations["es"][key] == kept
+
+
+def test_the_first_sync_sets_the_source_language(tmp_path: Path) -> None:
+    profile = create_initial_profile(PartialPersonalInfo())
+    assert profile.source_language is None
+
+    _sync(profile, _draft_with(), tmp_path, language="es")
+
+    saved = load_profile(tmp_path)
+    assert saved is not None and saved.source_language == "es"
+
+
+def test_a_later_sync_keeps_the_source_language(tmp_path: Path) -> None:
+    profile = sample_profile()
+
+    synced = _sync(profile, _draft_with(), tmp_path, language="es")
+
+    assert synced.source_language == "en"
+    saved = load_profile(tmp_path)
+    assert saved is not None and saved.source_language == "en"
+
+
+def test_the_mismatch_message_names_both_languages() -> None:
+    message = language_mismatch(sample_profile(), "es")
+
+    assert message == (
+        "This export is in Spanish, but your profile's LinkedIn content is in English. "
+        "The sync only reads the English export, so nothing was compared. "
+        "Export your LinkedIn profile in English and upload it again."
+    )
+
+
+def test_no_mismatch_without_a_profile_or_a_source_language_or_with_the_same_language() -> None:
+    assert language_mismatch(None, "es") == ""
+    assert language_mismatch(MasterProfile(personal=REQUIRED), "es") == ""
+    assert language_mismatch(sample_profile(), "en") == ""
+
+
+def test_restoring_a_schema_1_backup_returns_the_upgraded_profile(tmp_path: Path) -> None:
+    """The sync screen keeps what undo returns and later compares it with what load gives."""
+    legacy = MasterProfile(personal=REQUIRED).model_dump(mode="json")
+    legacy["schema_version"] = 1
+    legacy.pop("source_language", None)
+    legacy.pop("translations", None)
+    (tmp_path / "profile.20260828-134500.json").write_text(json.dumps(legacy), encoding="utf-8")
+
+    restored = restore_backup(tmp_path, "profile.20260828-134500.json")
+
+    loaded = load_profile(tmp_path)
+    assert loaded is not None
+    assert restored.source_language == loaded.source_language == "en"
+    assert profile_unchanged(restored, loaded)

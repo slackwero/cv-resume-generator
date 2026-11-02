@@ -116,3 +116,24 @@ def test_a_new_sync_offers_undo_again(screen: SyncState, screen_data: Path) -> N
     run(SyncState.start, screen)
 
     assert not screen.undo_refused
+
+
+def test_an_export_in_the_other_language_is_refused(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch, analyzed_against: list[MasterProfile]
+) -> None:
+    """A Spanish export over an English profile would read as every text changed."""
+
+    def spanish_export(_: Path, __: MasterProfile) -> AnalysisResult:
+        return AnalysisResult(detected_language="es")
+
+    monkeypatch.setattr(sync_state, "analyze_file", spanish_export)
+    save_profile(screen_data, _profile().model_copy(update={"source_language": "en"}))
+    before = (screen_data / "profile.json").read_bytes()
+    state = new_state(SyncState)
+    run(SyncState.start, state)
+
+    asyncio.run(state._analyze(EXPORT))
+
+    assert state.error_message.startswith("This export is in Spanish")
+    assert state.phase == PHASE_CHOOSE
+    assert (screen_data / "profile.json").read_bytes() == before

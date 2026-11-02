@@ -15,6 +15,7 @@ from cv_generator.importers.linkedin_pdf import import_from_pdf
 from cv_generator.importers.linkedin_zip import import_from_zip
 from cv_generator.importers.merge import Change, ChangeKind, apply_changes, compute_diff
 from cv_generator.models.profile import MasterProfile, PersonalInfo
+from cv_generator.rendering.i18n import language_name
 from cv_generator.services.profile import (
     PENDING_FIELD,
     SyncStatus,
@@ -144,6 +145,23 @@ def profile_unchanged(expected: MasterProfile | None, on_disk: MasterProfile | N
     return expected.model_dump() == on_disk.model_dump()
 
 
+def language_mismatch(profile: MasterProfile | None, detected: str) -> str:
+    """Why an export cannot be compared with this profile, or "" when it can.
+
+    The plain fields hold the language LinkedIn feeds. An export in the other one would
+    read as every text changed, and accepting it would overwrite the source with the
+    other language.
+    """
+    if profile is None or profile.source_language is None or profile.source_language == detected:
+        return ""
+    source = profile.source_language
+    return (
+        f"This export is in {language_name(detected)}, but your profile's LinkedIn content is in "
+        f"{language_name(source)}. The sync only reads the {language_name(source)} export, so nothing "
+        f"was compared. Export your LinkedIn profile in {language_name(source)} and upload it again."
+    )
+
+
 def _inventory(profile: MasterProfile) -> dict[str, int]:
     return {
         "experiences": len(profile.experiences),
@@ -172,6 +190,8 @@ def apply_sync(
     written to disk. The previous one is backed up before being overwritten.
     """
     result = apply_changes(profile, changes, accepted_items)
+    # The first sync decides which language the plain fields are in.
+    result = result.model_copy(update={"source_language": result.source_language or detected_language})
     when = moment or datetime.now()  # noqa: DTZ005
 
     backup = backup_profile(data_dir, when)
