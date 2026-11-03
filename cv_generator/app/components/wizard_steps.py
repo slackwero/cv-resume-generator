@@ -930,6 +930,41 @@ def _cv_photo() -> rx.Component:
     )
 
 
+def _profession_choice() -> rx.Component:
+    """The headline under your name, chosen from the list kept in My profile → Contact.
+
+    Like skills and achievements, a new one is written there and not here: My profile
+    opens in another tab so this CV is kept, and "Refresh list" brings it in.
+    """
+    return rx.el.div(
+        rx.el.label(
+            rx.el.span(
+                legend("Profession", color=TEXT_FAINT),
+                _pending_mark(WizardState.profession_mark),
+                style={"display": "flex", "align_items": "center", "gap": "0.5rem", "flex_wrap": "wrap"},
+            ),
+            rx.el.select(
+                rx.cond(
+                    WizardState.professions_list.length() == 0,
+                    rx.el.option("No profession in your list yet", value=""),
+                    rx.fragment(),
+                ),
+                rx.foreach(
+                    WizardState.professions_list,
+                    lambda entry: rx.el.option(entry["text"], value=entry["id"]),
+                ),
+                value=WizardState.profession_id,
+                on_change=WizardState.choose_profession,
+                style={**field_style(), "margin_top": "0.375rem", "cursor": "pointer"},
+            ),
+            style={"display": "block"},
+        ),
+        _profile_shortcut(
+            "contact", WizardState.update_professions, label="Add or edit in My profile", margin_top="0.5rem"
+        ),
+    )
+
+
 def application_step() -> rx.Component:
     return rx.el.div(
         _hint(
@@ -944,12 +979,7 @@ def application_step() -> rx.Component:
                 WizardState.target_role,
                 WizardState.update_target_role,
             ),
-            _field(
-                "Profession under your name",
-                "DevSecOps Engineer",
-                WizardState.header_profession,
-                WizardState.update_header_profession,
-            ),
+            _profession_choice(),
             style={
                 "display": "grid",
                 "grid_template_columns": ["1fr", "1fr", "repeat(2, minmax(0, 1fr))"],
@@ -1482,8 +1512,10 @@ def _skill_row(skill: rx.Var, index: rx.Var) -> rx.Component:
     )
 
 
-def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler, **style: str) -> rx.Component:
-    """Go create or edit skills or achievements without losing the half-built CV.
+def _profile_shortcut(
+    section: str, on_refresh: rx.event.EventHandler, *, label: str = "Add or edit in your profile", **style: str
+) -> rx.Component:
+    """Go create or edit professions, skills or achievements without losing the half-built CV.
 
     My profile opens in another tab, on the subsection of this list: going back to /new
     restarts the wizard. On return, "Refresh list" brings in what you changed without
@@ -1493,7 +1525,7 @@ def _profile_shortcut(section: str, on_refresh: rx.event.EventHandler, **style: 
         rx.link(
             rx.el.span(
                 rx.icon("external_link", size=13, stroke_width=1.75),
-                rx.el.span("Add or edit in your profile"),
+                rx.el.span(label),
                 style={"display": "flex", "align_items": "center", "gap": "0.375rem"},
             ),
             href=f"/profile?section={section}",

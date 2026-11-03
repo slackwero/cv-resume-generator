@@ -10,11 +10,15 @@ from pydantic import BaseModel, Field
 
 from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.placeholders import PENDING_FIELD  # noqa: F401  (re-exported: callers import it from here)
-from cv_generator.services.translations import PROFESSION_KEY, text_key
+from cv_generator.services.translations import text_key
 from cv_generator.storage.repo import read_json, save_json
 
 PROFILE_FILE = "profile.json"
 SYNC_FILE = "sync_state.json"
+
+# Where a profile from before the list (schema 2) kept the Spanish of its single headline.
+# Only the upgrade reads it, so it stays here after the translations stopped using it.
+LEGACY_PROFESSION_KEY = "personal.profession"
 
 # The five fields the CV cannot print empty.
 REQUIRED_PERSONAL_FIELDS = ("first_name", "last_name", "profession", "phone", "email")
@@ -89,7 +93,7 @@ def _upgraded(data_dir: Path, profile: MasterProfile) -> MasterProfile:
         profile.professions = [Profession(id=FIRST_PROFESSION_ID, text=profile.personal.profession)]
         # The Spanish of the old single headline now belongs to the first entry, intact.
         for entries in profile.translations.values():
-            moved = entries.pop(PROFESSION_KEY, None)
+            moved = entries.pop(LEGACY_PROFESSION_KEY, None)
             if moved is not None:
                 entries[text_key(FIRST_PROFESSION_ID, "text")] = moved
     profile.schema_version = 3

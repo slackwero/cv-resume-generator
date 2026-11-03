@@ -13,11 +13,10 @@ from typing import Any
 
 from cv_generator.models.profile import MasterProfile, Translation
 from cv_generator.rendering.i18n import available_languages
-
-PROFESSION_KEY = "personal.profession"
+from cv_generator.services.placeholders import PENDING_FIELD, is_usable_text
 
 # The profile lists and the fields of their items that have a version per language.
-# Achievements (their "text", nested in experiences) and the personal profession are handled besides.
+# Achievements (their "text") are walked inside their experiences.
 FIELDS: dict[str, tuple[str, ...]] = {
     "professions": ("text",),
     "profile_texts": ("text",),
@@ -43,7 +42,6 @@ SECTION_OF: dict[str, str] = {
     "languages": "languages",
     "skills": "skills",
     "professions": "contact",
-    "personal": "contact",
 }
 
 
@@ -84,7 +82,6 @@ def _slots(profile: MasterProfile) -> Iterator[_Slot]:
     Walking the real items, not the stored keys, is what makes keys of deleted items and
     unknown fields harmless.
     """
-    yield _Slot(PROFESSION_KEY, "personal", "profession", "personal", profile.personal, profile.personal.profession)
     for list_name, fields in FIELDS.items():
         for item in getattr(profile, list_name):
             for field in fields:
@@ -255,6 +252,19 @@ def drop_item(profile: MasterProfile, item_id: str) -> MasterProfile:
     return profile.model_copy(update={"translations": translations})
 
 
+def _headline_in(profile: MasterProfile, language: str, key: str) -> str | None:
+    """A headline's usable text in `language`, else in the other one; None when it has none.
+
+    `text_in` only falls back from a missing version; a headline also falls back from one
+    left as the `PENDING` placeholder, since it prints under the name.
+    """
+    for code in (language, other_language(language)):
+        text = text_in(profile, code, key)
+        if is_usable_text(text):
+            return text
+    return None
+
+
 def in_language(profile: MasterProfile, language: str) -> MasterProfile:
     """A plain profile with every translatable text in `language`.
 
@@ -263,6 +273,10 @@ def in_language(profile: MasterProfile, language: str) -> MasterProfile:
     source language, so it feeds the code that knows nothing of translations. A profile
     with no source language counts its plain fields as the source and applies the
     translations stored for `language`, if any.
+
+    `personal.profession` becomes the first usable headline in `language`, or `PENDING_FIELD`
+    when none has text: it is what a CV prints when it chose none. A profile with no list
+    keeps its profession: only one built in memory lacks it, a loaded one always has it.
     """
     view = profile.model_copy(deep=True)
     for slot in _slots(view):
@@ -270,6 +284,11 @@ def in_language(profile: MasterProfile, language: str) -> MasterProfile:
         if slot.source is None and entry is None:
             continue
         setattr(slot.owner, slot.field, text_in(profile, language, slot.key))
+    for profession in view.professions:
+        profession.text = _headline_in(profile, language, text_key(profession.id, "text")) or profession.text
+    if view.professions:
+        usable = [profession.text for profession in view.professions if is_usable_text(profession.text)]
+        view.personal.profession = usable[0] if usable else PENDING_FIELD
     view.translations = {}
     view.source_language = language
     return view
@@ -307,7 +326,7 @@ def pending_by_section(profile: MasterProfile, language: str) -> dict[str, int]:
 
 
 def item_marks(profile: MasterProfile, language: str) -> dict[str, TextState]:
-    """Item id -> MISSING when any of its fields is missing, else REVIEW. The profession is "personal"."""
+    """Item id -> MISSING when any of its fields is missing, else REVIEW."""
     marks: dict[str, TextState] = {}
     for slot, state in _pending(profile, language):
         if marks.get(slot.item_id) is not TextState.MISSING:

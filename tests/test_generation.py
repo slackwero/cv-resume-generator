@@ -4,14 +4,14 @@ from pathlib import Path
 import pytest
 
 from cv_generator.models.cv import GeneratedCV, JobPosting, SelectedExperience, Selection
-from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
+from cv_generator.models.profile import FIRST_PROFESSION_ID, Achievement, Experience, MasterProfile, Skill
 from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.i18n import default_sections
 from cv_generator.services import generation
 from cv_generator.services.achievements import add_achievement_in
 from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv
 from cv_generator.services.professions import add_profession
-from cv_generator.services.translations import PROFESSION_KEY, save_translation, text_key
+from cv_generator.services.translations import save_translation, text_key
 from cv_generator.storage.history import (
     archive_cv,
     load_history,
@@ -469,7 +469,7 @@ def _generate_in(tmp_path: Path, profile: MasterProfile, selection: Selection, l
 
 def test_a_spanish_cv_uses_the_spanish_content_and_falls_back_to_english(tmp_path: Path) -> None:
     profile = save_translation(sample_profile(), "es", text_key("ach-1", "text"), "Reduje el despliegue en 40%")
-    profile = save_translation(profile, "es", PROFESSION_KEY, "Ingeniera DevSecOps")
+    profile = save_translation(profile, "es", text_key(FIRST_PROFESSION_ID, "text"), "Ingeniera DevSecOps")
 
     cv = _generate_in(tmp_path, profile, _bilingual_selection(), "es")
 

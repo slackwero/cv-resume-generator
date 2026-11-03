@@ -11,11 +11,11 @@ import pytest
 
 from cv_generator.app.states import profile_state
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
-from cv_generator.models.profile import MasterProfile, Profession, Skill, Translation
+from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, Profession, Skill, Translation
 from cv_generator.services.preferences import load_content_language, save_content_language
 from cv_generator.services.professions import add_profession
 from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile
-from cv_generator.services.translations import PROFESSION_KEY, TextState, save_translation, state_in, text_key
+from cv_generator.services.translations import TextState, save_translation, state_in, text_key
 from tests.bilingual import sample_profile
 from tests.screens import new_state, run
 
@@ -82,7 +82,7 @@ def test_saving_contact_in_spanish_does_not_need_a_spanish_profession(screen_dat
     assert state.saved
     assert profile.personal.phone == "+56 9 3333 4444"
     assert profile.personal.profession == ENGLISH_PROFESSION
-    assert PROFESSION_KEY not in profile.translations.get("es", {})
+    assert text_key(FIRST_PROFESSION_ID, "text") not in profile.translations.get("es", {})
 
 
 def _without_a_usable_profession() -> MasterProfile:
@@ -146,7 +146,7 @@ def test_a_language_that_cannot_be_remembered_is_still_shown_and_the_failure_is_
     run(ProfileState.switch_language, state, "es")
 
     assert state.language == "es"
-    assert state.section_counts["contact"] == "2"
+    assert state.section_counts["contact"] == "1"
     assert state.language_error == "The language could not be remembered: the disk is full"
 
 
@@ -166,7 +166,7 @@ def test_a_switch_that_could_not_be_remembered_survives_opening_a_subsection(
     run(ProfileState.start, state)
 
     assert state.language == "es"
-    assert state.section_counts["contact"] == "2"
+    assert state.section_counts["contact"] == "1"
     assert state.language_error == "The language could not be remembered: the disk is full"
 
     # Once a switch is remembered again, opening a subsection reads the file as before.
@@ -279,12 +279,11 @@ def test_menu_counts_follow_the_language(screen_data: Path) -> None:
 
     run(ProfileState.switch_language, state, "es")
 
-    # The profession twice (its slot and the first entry of the list, until the slot goes);
-    # the role, location and achievement of the job; the study's title.
+    # The headline; the role, location and achievement of the job; the study's title.
     # A missing skill name is not pending.
     assert state.section_counts == {
         **dict.fromkeys(PROFILE_SECTIONS, ""),
-        "contact": "2",
+        "contact": "1",
         "experience": "3",
         "education": "1",
     }

@@ -41,16 +41,17 @@ from cv_generator.rendering.styles import (
 from cv_generator.services.achievements import AchievementOrigin, origin_of
 from cv_generator.services.generation import generate_cv, load_cv
 from cv_generator.services.photo import set_photo
+from cv_generator.services.placeholders import is_usable_text
 from cv_generator.services.preferences import load_content_language, save_content_language, starting_language
 from cv_generator.services.profile import load_profile, pending_fields, with_personal
 from cv_generator.services.system import ViewerUnavailable, open_with_viewer
 from cv_generator.services.translations import (
-    PROFESSION_KEY,
     TextState,
     in_language,
     item_marks,
     other_language,
     text_in,
+    text_key,
 )
 from cv_generator.tailoring.keywords import analyze_coverage, mentioned_terms
 from cv_generator.tailoring.resolver import resolve_content
@@ -78,6 +79,8 @@ PENDING_MARKS = {TextState.MISSING: "translation", TextState.REVIEW: "review"}
 
 # The profession's line in the list of what is pending.
 PROFESSION_LABEL = "Profession"
+# What a clone says when the headline its CV printed is no longer in the list.
+PROFESSION_GONE = "The profession this CV used is no longer in your list, so it starts with the first one."
 # The start of the message `_remember_language` leaves; the switch clears only that one.
 LANGUAGE_NOT_REMEMBERED = "The language could not be remembered: "
 
@@ -209,16 +212,16 @@ class WizardState(rx.State):
     # The CV's language, which is also the top-bar switch: its content and its labels.
     language: str = DEFAULT_LANGUAGE
     languages: list[dict[str, str]] = []
-    header_profession: str = ""
+    # The headline under the name, chosen by its id from the profile's list. The list holds
+    # the entries with text in some language, in the CV's language, with their marks.
+    profession_id: str = ""
+    professions_list: list[dict[str, str]] = []
 
     # What of the content is pending in the CV's language, rebuilt with the lists: selection
     # key -> "translation" or "review", and the line each one reads as. Plain vars and not
     # read from the profile: a computed var follows state vars only, never `_profile`.
     pending_marks: dict[str, str] = {}
     pending_labels: dict[str, str] = {}
-    # The profile's profession in the CV's language, and whether it is pending there.
-    profession_in_language: str = ""
-    profession_pending: bool = False
 
     profile_texts_list: list[dict[str, str]] = []
     profile_text_id: str = ""
@@ -299,8 +302,9 @@ class WizardState(rx.State):
 
         # Chosen here and not with the lists: rebuilding them in another language keeps it.
         self.profile_text_id = profile.profile_texts[0].id if profile.profile_texts else ""
+        # A new CV starts with the first headline, which `_show_content` takes when none is chosen.
+        self.profession_id = ""
         self._show_content()
-        self.header_profession = self.profession_in_language
         self._mark_all(profile)
         self._prepare_sections()
         self._prepare_templates(self._content_profile())
@@ -428,8 +432,9 @@ class WizardState(rx.State):
     def _show_content(self) -> None:
         """Builds everything the wizard shows of the profile in the CV's language, with its marks.
 
-        The lists hold no choice: the checks, the order, the chosen presentation text and the
-        titles live apart, so rebuilding them in another language keeps all of them.
+        The lists hold no choice: the checks, the order, the chosen presentation text and
+        profession, and the titles live apart, so rebuilding them in another language keeps
+        all of them. Only a chosen profession that left the list gives way to the first one.
         """
         if self._profile is None:
             return
@@ -442,9 +447,12 @@ class WizardState(rx.State):
         self.pending = pending_fields(profile)
         self._prepare_lists(profile, marks)
         self._flatten_for_ui(profile, marks, in_source=in_source)
-        self._list_pending(profile, marks)
+        self._list_pending()
+        listed = [entry["id"] for entry in self.professions_list]
+        if self.profession_id not in listed:
+            self.profession_id = listed[0] if listed else ""
 
-    def _list_pending(self, profile: MasterProfile, marks: dict[str, str]) -> None:
+    def _list_pending(self) -> None:
         """Gathers, from the lists just built, what is pending and how each one reads."""
         listed = [
             *[(text["id"], text["summary"], text["pending"]) for text in self.profile_texts_list],
@@ -461,10 +469,15 @@ class WizardState(rx.State):
         ]
         self.pending_marks = {key: mark for key, _, mark in listed if mark}
         self.pending_labels = {key: label for key, label, mark in listed if mark}
-        self.profession_in_language = profile.personal.profession
-        self.profession_pending = "personal" in marks
 
     def _prepare_lists(self, profile: MasterProfile, marks: dict[str, str]) -> None:
+        # An entry that only holds the `PENDING` placeholder is never offered: in the CV's
+        # language each one reads in its own text, or in the other language's.
+        self.professions_list = [
+            {"id": entry.id, "text": entry.text, "pending": marks.get(entry.id, "")}
+            for entry in profile.professions
+            if is_usable_text(entry.text)
+        ]
         self.experiences = [
             {
                 "id": experience.id,
@@ -615,7 +628,7 @@ class WizardState(rx.State):
         self._prepare_sections()
         self.template = previous.template
         self.profile_text_id = recipe.profile_text_id or self.profile_text_id
-        self.header_profession = self._clone_header_profession(recipe.header_profession)
+        self._clone_profession(recipe)
         self.include_photo = recipe.include_photo
         self._set_style(recipe.style)
 
@@ -642,6 +655,29 @@ class WizardState(rx.State):
             self.section_order = [str(s.kind) for s in recipe.sections]
             self.section_titles = {str(s.kind): s.title for s in recipe.sections}
             self.visible_sections = {str(s.kind): s.visible for s in recipe.sections}
+
+    def _clone_profession(self, recipe: Selection) -> None:
+        """Chooses the headline its CV printed: by id, or by its text in an old recipe.
+
+        A recipe from before the list stored the headline as text, in the language that CV
+        was made in, so it matches an entry in either language. A CV whose headline is no
+        longer in the list starts with the first one, and the message says so. A recipe that
+        stored neither starts with the first one too, with nothing to say.
+        """
+        listed = [entry["id"] for entry in self.professions_list]
+        if recipe.profession_id in listed:
+            self.profession_id = recipe.profession_id
+            return
+        header = recipe.header_profession
+        if header and self._profile is not None:
+            for entry_id in listed:
+                key = text_key(entry_id, "text")
+                if any(text_in(self._profile, code, key) == header for code in available_languages()):
+                    self.profession_id = entry_id
+                    return
+        self.profession_id = listed[0] if listed else ""
+        if recipe.profession_id or header:
+            self.message = PROFESSION_GONE
 
     # ------------------------------------------------------------- navigation
 
@@ -849,9 +885,28 @@ class WizardState(rx.State):
         self.target_role = value
 
     @rx.event
-    def update_header_profession(self, value: str) -> None:
-        self.header_profession = value
+    def choose_profession(self, profession_id: str) -> None:
+        """Picks the headline this CV prints from the list in the dropdown."""
+        # A choice that lands after "Refresh list" took that entry away would print a
+        # headline the dropdown no longer shows.
+        if not any(entry["id"] == profession_id for entry in self.professions_list):
+            return
+        self.profession_id = profession_id
         self._invalidate_preview()
+
+    @rx.var
+    def profession_in_language(self) -> str:
+        """The chosen headline as this CV prints it, in its language."""
+        return _listed(self.professions_list, self.profession_id).get("text", "")
+
+    @rx.var
+    def profession_mark(self) -> str:
+        """The chosen headline's mark in the CV's language: "translation", "review" or ""."""
+        return _listed(self.professions_list, self.profession_id).get("pending", "")
+
+    @rx.var
+    def profession_pending(self) -> bool:
+        return self.profession_mark != ""
 
     @rx.event
     def update_posting_company(self, value: str) -> None:
@@ -1029,8 +1084,9 @@ class WizardState(rx.State):
 
         Like the photo, only they are refreshed, with the translations as they are on disk:
         going back to /new restarts the wizard. The photo stays as this CV has it; "I
-        uploaded it" is what brings that one. A header profession you wrote for this CV
-        stays too.
+        uploaded it" is what brings that one. The professions come too, since Contact is
+        where they are written: without them a profession completed there would still be
+        missing here. The chosen one stays while it is still in the list.
         """
         self.contact_notice = ""
         profile = load_profile(DATA_DIR)
@@ -1038,9 +1094,9 @@ class WizardState(rx.State):
             return
 
         before = self._content_profile()
-        self._profile = with_translations_of(with_personal(self._profile, profile.personal), profile)
+        contact = with_personal(self._profile, profile.personal).model_copy(update={"professions": profile.professions})
+        self._profile = with_translations_of(contact, profile)
         self._show_content()
-        self._follow_profession(before.personal.profession)
         if self.pending:
             self.contact_notice = (
                 f"Your profile still has no {', '.join(self.pending)}. "
@@ -1051,27 +1107,6 @@ class WizardState(rx.State):
             return
         self._refresh_template_views()
         self._invalidate_preview()
-
-    def _clone_header_profession(self, stored: str | None) -> str:
-        """The profession a clone prints: the profile's, in the CV's language, unless you wrote one.
-
-        The wizard stores the header even when it was the profile's profession, so a stored
-        text equal to the profile's profession in any language is that profession, not an
-        override; kept as is it would stay in the language it was made in.
-        """
-        if not stored or self._profile is None:
-            return self.profession_in_language
-        if any(stored == text_in(self._profile, code, PROFESSION_KEY) for code in available_languages()):
-            return self.profession_in_language
-        return stored
-
-    def _follow_profession(self, previous: str) -> None:
-        """The header profession taken from the profile follows it; one you wrote for this CV stays.
-
-        `previous` is the profile's profession in the CV's language before the change.
-        """
-        if self.header_profession == previous:
-            self.header_profession = self.profession_in_language
 
     @rx.event
     def toggle_full_text(self, profile_text_id: str) -> None:
@@ -1088,8 +1123,8 @@ class WizardState(rx.State):
         """Puts the CV in another language: its content, its titles and the language remembered.
 
         The choice in "The application" step and the top-bar switch both land here. Only
-        what is shown is rebuilt: the checks, the order, the chosen presentation text, the
-        titles you customized and a profession you wrote for this CV all stay.
+        what is shown is rebuilt: the checks, the order, the chosen presentation text and
+        profession, and the titles you customized all stay.
         """
         if language not in available_languages():
             return
@@ -1106,11 +1141,9 @@ class WizardState(rx.State):
             kind: new_entries[SectionKind(kind)] if title == previous_items[SectionKind(kind)] else title
             for kind, title in self.section_titles.items()
         }
-        previous_profession = self.profession_in_language
         self.language = language
         self._remember_language()
         self._show_content()
-        self._follow_profession(previous_profession)
         self._refresh_template_views()
         self._invalidate_preview()
         # The analysis compared the posting with the other language's text. `_invalidate_preview`
@@ -1134,9 +1167,8 @@ class WizardState(rx.State):
         """What this CV prints that is pending in its language, by the line each one reads as.
 
         Only what is checked: an achievement counts while its job is checked too, since the
-        selection drops it with the job. The profile's profession counts while it is the one
-        printed, the header's own or, left empty, the profile's. A section hidden for this CV
-        prints nothing, so what it holds does not count.
+        selection drops it with the job, and the profession while the chosen headline is
+        pending. A section hidden for this CV prints nothing, so what it holds does not count.
         """
         section_of = {
             **{text["id"]: str(SectionKind.PROFILE) for text in self.profile_texts_list},
@@ -1145,7 +1177,7 @@ class WizardState(rx.State):
             **{item["id"]: item["group"] for item in self.other_items},
         }
         lines = []
-        if self.profession_pending and self.header_profession in ("", self.profession_in_language):
+        if self.profession_pending:
             lines.append(PROFESSION_LABEL)
         for key in self.pending_marks:
             if not self.visible_sections.get(section_of.get(key, ""), True):
@@ -1235,13 +1267,11 @@ class WizardState(rx.State):
         if profile is None or self._profile is None:
             return
 
-        previous_profession = self.profession_in_language
         self._profile = with_translations_of(self._profile.model_copy(update={"skills": profile.skills}), profile)
         new_items = [h.id for h in profile.skills if h.id not in self.skill_order]
         self.skill_order = _order_with_profile(self.skill_order, [h.id for h in profile.skills])
         self.marked_items = {**self.marked_items, **dict.fromkeys(new_items, True)}
         self._show_content()
-        self._follow_profession(previous_profession)
         self._invalidate_preview()
 
     @rx.event
@@ -1258,11 +1288,26 @@ class WizardState(rx.State):
             return
 
         previous = self._profile
-        previous_profession = self.profession_in_language
         self._profile = with_translations_of(with_refreshed_achievements(previous, profile), profile)
         self.marked_achievements = refreshed_achievement_marks(self.marked_achievements, previous, self._profile)
         self._show_content()
-        self._follow_profession(previous_profession)
+        self._invalidate_preview()
+
+    @rx.event
+    def update_professions(self) -> None:
+        """Brings in the headlines you added, edited, reordered or removed in My profile.
+
+        Like `update_skills`, for the profession dropdown. The chosen one stays while it is
+        still in the list; once it is gone the CV takes the first one.
+        """
+        profile = load_profile(DATA_DIR)
+        if profile is None or self._profile is None:
+            return
+
+        self._profile = with_translations_of(
+            self._profile.model_copy(update={"professions": profile.professions}), profile
+        )
+        self._show_content()
         self._invalidate_preview()
 
     # ------------------------------------------------- bulk actions
@@ -1325,7 +1370,9 @@ class WizardState(rx.State):
 
         return Selection(
             profile_text_id=self.profile_text_id or None,
-            header_profession=self.header_profession or None,
+            # The headline travels by id; a free text is only read from recipes older than the list.
+            profession_id=self.profession_id or None,
+            header_profession=None,
             include_photo=self.include_photo,
             style=self._build_style(),
             experiences=experiences,
@@ -1503,6 +1550,11 @@ def with_translations_of(current: MasterProfile, on_disk: MasterProfile) -> Mast
     keyed by item id, so the ones of items this CV does not hold are never read.
     """
     return current.model_copy(update={"translations": on_disk.translations, "source_language": on_disk.source_language})
+
+
+def _listed(entries: list[dict[str, str]], entry_id: str) -> dict[str, str]:
+    """The listed entry with that id; empty when it is not in the list."""
+    return next((entry for entry in entries if entry["id"] == entry_id), {})
 
 
 def _order_with_profile(order: list[str], profile_ids: list[str]) -> list[str]:

@@ -17,18 +17,20 @@ from cv_generator.app.pages.wizard import wizard_page
 from cv_generator.app.states import wizard_state
 from cv_generator.app.states.wizard_state import WizardState
 from cv_generator.models.cv import CVContent, GeneratedCV, SelectedExperience, Selection
-from cv_generator.models.profile import Achievement, MasterProfile, ProfileText
+from cv_generator.models.profile import FIRST_PROFESSION_ID, Achievement, MasterProfile, ProfileText
 from cv_generator.models.sections import SectionKind
 from cv_generator.rendering.i18n import default_sections, load_language
-from cv_generator.services.generation import load_cv, save_cv
+from cv_generator.services.generation import save_cv
 from cv_generator.services.preferences import load_content_language, save_content_language
+from cv_generator.services.professions import add_profession
 from cv_generator.services.profile import SyncStatus, save_profile, save_sync_status
-from cv_generator.services.translations import PROFESSION_KEY, save_translation, text_key
+from cv_generator.services.translations import save_translation, text_key
 from tests import bilingual
 from tests.screens import new_state, run
 
 PROFESSION = "DevSecOps Engineer"
 PROFESSION_ES = "Ingeniera DevSecOps"
+HEADLINE_KEY = text_key(FIRST_PROFESSION_ID, "text")
 PRESENTATION = "Security engineer who ships platforms."
 OTHER_PRESENTATION = "Platform engineer focused on delivery."
 CUT = "Cut deploy time by 40%"
@@ -107,15 +109,6 @@ def _cloned_cv(data_dir: Path, profile: MasterProfile) -> str:
     return cv.cv_id
 
 
-def _clone_with_header(data_dir: Path, profile: MasterProfile, header: str) -> WizardState:
-    """Clones the Spanish CV after rewriting its recipe to carry `header` as its header profession."""
-    cv_id = _cloned_cv(data_dir, profile)
-    cv = load_cv(data_dir, cv_id)
-    cv.selection = cv.selection.model_copy(update={"header_profession": header})
-    save_cv(data_dir, cv)
-    return _open(data_dir, profile, f"/new?from={cv_id}")
-
-
 def _cannot_save(monkeypatch: pytest.MonkeyPatch) -> None:
     def full(data_dir: Path, language: str) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
@@ -146,7 +139,7 @@ def test_without_a_remembered_language_it_opens_in_the_source_one(screen_data: P
 
 
 def test_a_clone_opens_in_its_language_and_remembers_it(screen_data: Path) -> None:
-    profile = save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES)
+    profile = save_translation(_profile(), "es", HEADLINE_KEY, PROFESSION_ES)
     cv_id = _cloned_cv(screen_data, profile)
     save_content_language(screen_data, "en")
 
@@ -155,7 +148,8 @@ def test_a_clone_opens_in_its_language_and_remembers_it(screen_data: Path) -> No
     assert state.language == "es"
     assert load_content_language(screen_data) == "es"
     assert _row(state, "exp-1|ach-1")["text"] == CUT_ES
-    assert state.header_profession == PROFESSION_ES
+    assert state.profession_in_language == PROFESSION_ES
+    assert state.message == ""
     # The recipe kept no sections: the titles are the clone's language's, not the remembered one's.
     assert state.section_titles == {str(section.kind): section.title for section in default_sections("es")}
     assert state.profile_text_id == "pt-2"
@@ -196,37 +190,6 @@ def test_changing_language_keeps_the_choices(screen_data: Path) -> None:
     assert _row(state, "exp-1|ach-1")["text"] == CUT_ES
     assert CUT_ES in state.large_view
     assert load_content_language(screen_data) == "es"
-
-
-def test_a_clone_stored_with_the_profession_in_the_other_language_prints_it_in_its_own(screen_data: Path) -> None:
-    # The CV was made before the profession had a Spanish version, so it stored the English one.
-    profile = save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES)
-
-    state = _clone_with_header(screen_data, profile, PROFESSION)
-
-    assert state.language == "es"
-    assert state.header_profession == PROFESSION_ES
-    assert "Profession" not in state.pending_in_selection
-
-
-def test_a_clone_keeps_a_header_profession_written_for_that_cv(screen_data: Path) -> None:
-    profile = save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES)
-
-    state = _clone_with_header(screen_data, profile, "Ingeniera de seguridad")
-
-    assert state.header_profession == "Ingeniera de seguridad"
-
-
-def test_the_profile_profession_follows_the_language_and_yours_stays(screen_data: Path) -> None:
-    state = _open(screen_data, save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES))
-    assert state.header_profession == PROFESSION
-
-    run(WizardState.change_language, state, "es")
-    assert state.header_profession == PROFESSION_ES
-
-    run(WizardState.update_header_profession, state, "AI Engineer")
-    run(WizardState.change_language, state, "en")
-    assert state.header_profession == "AI Engineer"
 
 
 def test_choosing_the_language_already_on_does_not_discard_the_preview(screen_data: Path) -> None:
@@ -338,8 +301,11 @@ def test_the_preview_content_is_in_the_cv_language(screen_data: Path) -> None:
 
 
 def test_the_warning_counts_only_checked_pending_items(screen_data: Path) -> None:
+    profile = add_profession(_profile(), "Security Engineer", "en")
+    translated = profile.professions[-1].id
+    profile = save_translation(profile, "es", text_key(translated, "text"), "Ingeniera de seguridad")
     save_content_language(screen_data, "es")
-    state = _open(screen_data)
+    state = _open(screen_data, profile)
 
     # The second presentation text is pending too, but it is not the chosen one.
     assert state.pending_in_selection == ["Profession", PRESENTATION, SCAN, DEGREE_ES]
@@ -348,8 +314,8 @@ def test_the_warning_counts_only_checked_pending_items(screen_data: Path) -> Non
     # Unchecking the job takes its achievements out of the CV with it.
     run(WizardState.toggle, state, "exp-1", False)
     run(WizardState.toggle, state, "edu-1", False)
-    # A profession written for this CV is not the profile's pending one.
-    run(WizardState.update_header_profession, state, "Ingeniera de seguridad")
+    # Another headline, current in Spanish, is not pending.
+    run(WizardState.choose_profession, state, translated)
 
     assert state.pending_in_selection == [PRESENTATION]
     assert state.pending_warning == (
@@ -404,12 +370,12 @@ def test_refreshing_the_skills_brings_their_translations(screen_data: Path) -> N
 def test_checking_the_contact_again_brings_the_profession_in_the_cv_language(screen_data: Path) -> None:
     save_content_language(screen_data, "es")
     state = _open(screen_data)
-    assert state.header_profession == PROFESSION
-    save_profile(screen_data, save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES))
+    assert state.profession_in_language == PROFESSION
+    save_profile(screen_data, save_translation(_profile(), "es", HEADLINE_KEY, PROFESSION_ES))
 
     run(WizardState.fetch_contact_details, state)
 
-    assert state.header_profession == PROFESSION_ES
+    assert state.profession_in_language == PROFESSION_ES
     assert "Profession" not in state.pending_in_selection
 
 

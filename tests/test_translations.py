@@ -1,8 +1,8 @@
 import pytest
 
-from cv_generator.models.profile import MasterProfile, Translation
+from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, Profession, Translation
+from cv_generator.services.placeholders import PENDING_FIELD
 from cv_generator.services.translations import (
-    PROFESSION_KEY,
     TextState,
     after_source_edit,
     confirm,
@@ -18,6 +18,7 @@ from cv_generator.services.translations import (
     source_text_of,
     state_in,
     text_in,
+    text_key,
 )
 from tests.bilingual import sample_profile
 
@@ -213,16 +214,16 @@ def test_keys_of_missing_items_or_unknown_fields_are_ignored() -> None:
 
     in_language(p, "es")
     assert "gone-1.text" not in field_states(p, "es")
-    assert pending_totals(p, "es") == (6, 0)
+    assert pending_totals(p, "es") == (5, 0)
 
 
 def test_pending_totals_and_sections() -> None:
     p = sample_profile()
 
-    assert pending_totals(p, "es") == (6, 0)
+    assert pending_totals(p, "es") == (5, 0)
     assert pending_by_section(p, "es")["experience"] == 3
     assert pending_by_section(p, "es")["education"] == 1
-    assert pending_by_section(p, "es")["contact"] == 2
+    assert pending_by_section(p, "es")["contact"] == 1
     assert pending_by_section(p, "es")["skills"] == 0
     assert pending_totals(p, "en") == (0, 0)
 
@@ -230,9 +231,56 @@ def test_pending_totals_and_sections() -> None:
 def test_professions_count_in_the_contact_section() -> None:
     p = sample_profile()
 
-    assert pending_by_section(p, "es")["contact"] == 2
+    assert pending_by_section(p, "es")["contact"] == 1
     assert field_states(p, "es")["profession-headline.text"] is TextState.MISSING
     assert in_language(p, "es").professions[0].text == "DevSecOps Engineer"
+
+
+HEADLINE_KEY = text_key(FIRST_PROFESSION_ID, "text")
+
+
+def _headline_left_pending(profile: MasterProfile) -> MasterProfile:
+    """What the first sync leaves when LinkedIn brought no headline: one entry, the placeholder."""
+    return profile.model_copy(
+        update={
+            "personal": profile.personal.model_copy(update={"profession": PENDING_FIELD}),
+            "professions": [Profession(id=FIRST_PROFESSION_ID, text=PENDING_FIELD)],
+        }
+    )
+
+
+def test_in_language_prints_the_first_usable_headline_in_that_language() -> None:
+    p = sample_profile()
+    p.professions.insert(0, Profession(id="p-placeholder", text=PENDING_FIELD))
+    p = save_translation(p, "es", HEADLINE_KEY, "Ingeniera DevSecOps")
+
+    assert in_language(p, "es").personal.profession == "Ingeniera DevSecOps"
+    assert in_language(p, "en").personal.profession == "DevSecOps Engineer"
+
+
+def test_a_headline_left_as_the_placeholder_reads_from_the_other_language() -> None:
+    p = save_translation(_headline_left_pending(sample_profile()), "es", HEADLINE_KEY, "Ingeniera DevSecOps")
+
+    view = in_language(p, "en")
+
+    assert view.professions[0].text == "Ingeniera DevSecOps"
+    assert view.personal.profession == "Ingeniera DevSecOps"
+
+
+def test_with_no_usable_headline_the_profession_is_pending() -> None:
+    p = _headline_left_pending(sample_profile())
+
+    assert in_language(p, "en").personal.profession == PENDING_FIELD
+    assert in_language(p, "es").personal.profession == PENDING_FIELD
+
+
+def test_a_profile_with_no_list_yet_keeps_its_profession() -> None:
+    """Only a profile built in memory has no list: loading one always gives it its first entry."""
+    sample = sample_profile()
+    personal = sample.personal.model_copy(update={"profession": "Cloud Engineer"})
+    p = sample.model_copy(update={"personal": personal, "professions": []})
+
+    assert in_language(p, "es").personal.profession == "Cloud Engineer"
 
 
 def test_item_marks_say_missing_before_review() -> None:
@@ -241,9 +289,10 @@ def test_item_marks_say_missing_before_review() -> None:
     marks = item_marks(p, "es")
 
     assert marks["exp-1"] is TextState.MISSING
-    assert marks["personal"] is TextState.MISSING
+    assert marks[FIRST_PROFESSION_ID] is TextState.MISSING
     assert marks["ach-1"] is TextState.REVIEW
-    assert PROFESSION_KEY == "personal.profession"
+    # The headline is marked as the entry of the list it is, never as a field of "personal".
+    assert "personal" not in marks
 
 
 def test_copy_and_drop_item_follow_the_item() -> None:
