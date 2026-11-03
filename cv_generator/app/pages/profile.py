@@ -497,6 +497,11 @@ def _text_row(row: rx.Var, *, long: bool) -> rx.Component:
     """
     return rx.el.div(
         rx.cond(row["context"] != "", note_text(row["context"], style={"display": "block"}), rx.fragment()),
+        rx.cond(
+            (TranslationState.error != "") & (TranslationState.error_at == row["key"]),
+            error_notice(TranslationState.error, margin_top="0.25rem"),
+            rx.fragment(),
+        ),
         translation_field(
             row,
             on_save=TranslationState.save_text,
@@ -514,7 +519,8 @@ def _texts(name: str) -> rx.Component:
     by hand in the other one."""
     return panel(
         legend(PROFILE_SECTIONS[name], color=AMBER),
-        _error_notice(TranslationState.error, margin_top="0.75rem"),
+        # An error of a row shows under its context; the rest (an unreadable profile) here.
+        _error_notice(rx.cond(TranslationState.error_at == "", TranslationState.error, ""), margin_top="0.75rem"),
         rx.cond(
             TranslationState.rows[name].length() > 0,
             rx.el.div(

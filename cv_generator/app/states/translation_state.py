@@ -11,7 +11,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
-from cv_generator.app.errors import as_sentence
+from cv_generator.app.errors import as_sentence, readable
 from cv_generator.app.states.profile_state import ProfileState, text_version
 from cv_generator.models.profile import Course, Education, MasterProfile
 from cv_generator.rendering.i18n import language_name
@@ -101,8 +101,7 @@ class TranslationState(rx.State):
         from it: after a switch that could not be remembered, the file holds the one before.
         """
         self.language = await self._screen_language()
-        self._clear_error()
-        self._show(load_profile(DATA_DIR))
+        await self._reload()
 
     @rx.event
     async def show_language(self) -> None:
@@ -111,8 +110,17 @@ class TranslationState(rx.State):
         if language == self.language:
             return
         self.language = language
+        await self._reload()
+
+    async def _reload(self) -> None:
+        """Shows the profile on disk. One that cannot be read shows as an error, not a crash."""
         self._clear_error()
-        self._show(load_profile(DATA_DIR))
+        try:
+            profile = await asyncio.to_thread(load_profile, DATA_DIR)
+        except (ValueError, OSError) as error:
+            self.error = f"Your profile could not be read: {readable(error)}"
+            profile = None
+        self._show(profile)
 
     async def _screen_language(self) -> str:
         return (await self.get_state(ProfileState)).language

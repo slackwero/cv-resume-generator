@@ -2,6 +2,7 @@
 translated by hand in the other one."""
 
 import asyncio
+import errno
 from pathlib import Path
 
 import pytest
@@ -156,3 +157,64 @@ def test_the_other_language_follows_the_switch(screen_data: Path) -> None:
 
 def test_rows_of_a_profile_without_items_are_empty() -> None:
     assert text_rows(bilingual.sample_profile(), "en", "presentation") == []
+
+
+def _count_saves(monkeypatch: pytest.MonkeyPatch) -> list[MasterProfile]:
+    saves: list[MasterProfile] = []
+
+    def spy(data_dir: Path, profile: MasterProfile) -> None:
+        saves.append(profile)
+        save_profile(data_dir, profile)
+
+    monkeypatch.setattr(translation_state, "save_profile", spy)
+    return saves
+
+
+def test_no_profile_on_disk_shows_nothing_and_no_error(screen_data: Path) -> None:
+    tab = new_state(TranslationState, "/profile?section=education")
+    run(ProfileState.start, _screen(tab))
+    run(TranslationState.start, tab)
+    assert tab.error == ""
+    assert all(rows == [] for rows in tab.rows.values())
+
+
+def test_an_unreadable_profile_is_an_error_not_a_crash(screen_data: Path) -> None:
+    tab = _open(screen_data, language="es")
+    (screen_data / "profile.json").write_text("{ not json", encoding="utf-8")
+
+    run(TranslationState.start, tab)
+
+    assert tab.error.startswith("Your profile could not be read: ")
+    assert all(rows == [] for rows in tab.rows.values())
+    # ProfileState.switch_language reads the same file; this is only the follower.
+    _screen(tab).language = "en"
+    run(TranslationState.show_language, tab)
+    assert tab.error.startswith("Your profile could not be read: ")
+
+
+def test_a_failed_save_shows_the_error_and_what_is_on_disk(screen_data: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tab = _open(screen_data, language="es")
+
+    def full(data_dir: Path, profile: MasterProfile) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(translation_state, "save_profile", full)
+    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad")
+
+    assert tab.error == "Nothing was saved: the disk is full."
+    assert tab.error_at == COURSE_KEY
+    assert _row(tab, "courses", COURSE_KEY)["own"] == ""
+    assert _stored(screen_data, COURSE_KEY) is None
+
+
+def test_confirm_in_english_and_same_text_on_a_non_copyable_row_write_nothing(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saves = _count_saves(monkeypatch)
+    english = _open(screen_data)
+    run(TranslationState.confirm, english, COURSE_KEY)
+    assert saves == []
+
+    spanish = _open(screen_data, language="es")
+    run(TranslationState.same_text, spanish, LEVEL_KEY)
+    assert saves == []
