@@ -56,6 +56,9 @@ class Selection(BaseModel):
     """
 
     profile_text_id: str | None = None
+    # The headline entry of the profile's profession list; recipes older than the list only
+    # carry `header_profession`, a free text, and keep working.
+    profession_id: str | None = None
     header_profession: str | None = None
     # Some applications expect a CV without a photo even if the profile has one. Recipes
     # older than this option do not carry it and are read as "with photo".

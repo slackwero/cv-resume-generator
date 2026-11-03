@@ -9,6 +9,7 @@ from typing import Protocol
 from cv_generator.models.cv import CVContent, Selection
 from cv_generator.models.profile import Experience, MasterProfile
 from cv_generator.models.sections import Section
+from cv_generator.services.placeholders import is_usable_text
 
 
 class ItemWithId(Protocol):
@@ -54,11 +55,23 @@ def _resolve_sections(selection: Selection) -> list[Section]:
     return sorted(visible_items, key=lambda section: section.order)
 
 
+def _chosen_profession(profile: MasterProfile, selection: Selection) -> str | None:
+    """The headline to print: the chosen entry, else the recipe's free text, else None (the mirror).
+
+    An entry with no usable text falls through, so the CV never prints the placeholder.
+    """
+    chosen = next((entry for entry in profile.professions if entry.id == selection.profession_id), None)
+    if chosen is not None and is_usable_text(chosen.text):
+        return chosen.text
+    return selection.header_profession or None
+
+
 def resolve_content(profile: MasterProfile, selection: Selection) -> CVContent:
     """Builds the frozen content of a CV from the profile and the selection."""
     personal = profile.personal.model_copy(deep=True)
-    if selection.header_profession:
-        personal = personal.model_copy(update={"profession": selection.header_profession})
+    profession = _chosen_profession(profile, selection)
+    if profession:
+        personal = personal.model_copy(update={"profession": profession})
     if not selection.include_photo:
         personal = personal.model_copy(update={"photo": None})
 

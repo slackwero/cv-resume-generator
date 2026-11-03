@@ -10,6 +10,7 @@ from cv_generator.rendering.i18n import default_sections
 from cv_generator.services import generation
 from cv_generator.services.achievements import add_achievement_in
 from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv
+from cv_generator.services.professions import add_profession
 from cv_generator.services.translations import PROFESSION_KEY, save_translation, text_key
 from cv_generator.storage.history import (
     archive_cv,
@@ -491,3 +492,23 @@ def test_an_english_cv_prints_an_achievement_written_only_in_spanish_with_its_sp
     cv = _generate_in(tmp_path, profile, _bilingual_selection(new_id), "en")
 
     assert cv.content.experiences[0].achievements[0].text == "Automaticé las revisiones"
+
+
+def test_the_chosen_profession_is_printed_in_the_cv_language(tmp_path: Path) -> None:
+    profile = add_profession(sample_profile(), "Security Architect", "en")
+    chosen = profile.professions[-1].id
+    profile = save_translation(profile, "es", text_key(chosen, "text"), "Arquitecta de seguridad")
+    selection = _bilingual_selection().model_copy(update={"profession_id": chosen})
+
+    cv = _generate_in(tmp_path, profile, selection, "es")
+
+    assert cv.content.personal.profession == "Arquitecta de seguridad"
+
+
+def test_a_profession_written_only_in_spanish_prints_its_spanish_in_english(tmp_path: Path) -> None:
+    profile = add_profession(sample_profile(), "Arquitecta de seguridad", "es")
+    selection = _bilingual_selection().model_copy(update={"profession_id": profile.professions[-1].id})
+
+    cv = _generate_in(tmp_path, profile, selection, "en")
+
+    assert cv.content.personal.profession == "Arquitecta de seguridad"

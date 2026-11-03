@@ -1,7 +1,7 @@
 import pytest
 
 from cv_generator.models.cv import SelectedExperience, Selection
-from cv_generator.models.profile import Achievement, Experience, MasterProfile, ProfileText, Skill
+from cv_generator.models.profile import Achievement, Experience, MasterProfile, Profession, ProfileText, Skill
 from cv_generator.models.sections import Section, SectionKind
 from cv_generator.tailoring.resolver import resolve_content
 from tests.test_models_personal import REQUIRED
@@ -107,6 +107,32 @@ def test_keeps_the_profile_profession_if_the_selection_does_not_override_it(
 
     assert content.personal.profession == "Cloud Security Architect"
     assert profile.personal.profession == "DevSecOps Engineer", "the master profile must not mutate"
+
+
+def test_an_old_recipe_with_header_profession_still_resolves(profile: MasterProfile) -> None:
+    old = Selection.model_validate({"header_profession": "Cloud Security Architect"})
+
+    assert old.profession_id is None
+    assert resolve_content(profile, old).personal.profession == "Cloud Security Architect"
+
+
+def test_the_chosen_profession_wins_over_header_profession(profile: MasterProfile) -> None:
+    profile.professions = [Profession(id="p-1", text="DevSecOps Engineer"), Profession(id="p-2", text="AI Engineer")]
+    selection = Selection(profession_id="p-2", header_profession="Cloud Security Architect")
+
+    assert resolve_content(profile, selection).personal.profession == "AI Engineer"
+
+
+def test_a_pending_entry_is_never_printed_while_another_is_usable(profile: MasterProfile) -> None:
+    profile.professions = [Profession(id="p-1", text="PENDING"), Profession(id="p-2", text="")]
+    profile.personal = profile.personal.model_copy(update={"profession": "DevSecOps Engineer"})
+
+    for chosen in ("p-1", "p-2"):
+        content = resolve_content(profile, Selection(profession_id=chosen))
+        assert content.personal.profession == "DevSecOps Engineer"
+
+    content = resolve_content(profile, Selection(profession_id="p-1", header_profession="Cloud Architect"))
+    assert content.personal.profession == "Cloud Architect"
 
 
 def test_gives_only_visible_sections_in_order(profile: MasterProfile, devsecops_selection: Selection) -> None:
