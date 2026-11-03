@@ -18,6 +18,7 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
+    VISUALLY_HIDDEN,
     error_notice,
     field_style,
     legend,
@@ -71,6 +72,7 @@ def _confirmation(row: rx.Var) -> rx.Component:
             id=question,
             style={"font_stretch": "100%", "font_size": "0.8125rem", "color": TEXT, "line_height": "1.5"},
         ),
+        _row_error(row),
         rx.el.div(
             primary_button(
                 "Delete", type="button", on_click=ProfessionState.confirm_delete(row["key"]), style=_SMALL_BUTTON
@@ -137,6 +139,26 @@ def _profession_row(row: rx.Var) -> rx.Component:
     )
 
 
+def _live_error() -> rx.Component:
+    """The list's only live region: it announces every error once, wherever it is drawn.
+
+    Above the list it only draws the error of a row that is gone or of the whole list; the
+    rest are drawn at their row or the add form, so here they are only read out.
+    """
+    return rx.el.div(
+        rx.cond(
+            ProfessionState.error != "",
+            rx.cond(
+                ProfessionState.error_at != "",
+                rx.el.span(ProfessionState.error, style=VISUALLY_HIDDEN),
+                error_notice(ProfessionState.error, margin_top="0.5rem"),
+            ),
+            rx.fragment(),
+        ),
+        aria_live="polite",
+    )
+
+
 def _add_form() -> rx.Component:
     return rx.el.form(
         rx.el.label("Add a profession", html_for="profession-new", style=style_legend(TEXT_FAINT)),
@@ -190,11 +212,7 @@ def professions_editor() -> rx.Component:
             style={"display": "flex", "align_items": "center", "gap": "0.5rem", "margin_bottom": "0.375rem"},
         ),
         note_text("It appears under your name. Each CV picks one.", style={"display": "block"}),
-        rx.cond(
-            (ProfessionState.error != "") & (ProfessionState.error_at == ""),
-            error_notice(ProfessionState.error, margin_top="0.5rem"),
-            rx.fragment(),
-        ),
+        _live_error(),
         rx.el.div(
             rx.foreach(ProfessionState.rows, _profession_row),
             style={"border_top": f"1px solid {RULE_LINE}", "margin_top": "0.75rem"},

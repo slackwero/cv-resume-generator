@@ -167,9 +167,13 @@ class ProfessionState(rx.State):
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
             self.error = as_sentence(error)
-            self.error_at = at
-            # Nothing was saved, but the screen may be the stale one.
-            self._show(on_disk)
+            # Nothing was saved, but the screen may be the stale one: after "That profession
+            # no longer exists" it would keep offering the row that fails. A profile that
+            # cannot be read leaves the list as it is.
+            if on_disk is not None:
+                self._show(on_disk)
+            # An error of a row that is gone shows above the list.
+            self.error_at = at if at == ADD_FORM or any(row["key"] == at for row in self.rows) else ""
             return False
         self._show(updated)
         return True

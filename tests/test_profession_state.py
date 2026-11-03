@@ -281,3 +281,46 @@ def test_no_profile_on_disk_shows_nothing_and_no_error(screen_data: Path) -> Non
     run(ProfessionState.start, tab)
     assert tab.error == ""
     assert tab.rows == []
+
+
+def test_a_failed_delete_keeps_the_rows_and_the_error_is_at_a_row_that_renders(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tab = _open(screen_data)
+    run(ProfessionState.ask_delete, tab, SECOND_KEY)
+
+    def full(data_dir: Path, profile: MasterProfile) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(profession_state, "save_profile", full)
+    run(ProfessionState.confirm_delete, tab, SECOND_KEY)
+
+    assert [row["key"] for row in tab.rows] == [FIRST_KEY, SECOND_KEY]
+    assert tab.error == "Nothing was saved: the disk is full."
+    assert tab.error_at == SECOND_KEY
+    assert tab.confirming_key == SECOND_KEY
+
+
+def test_an_edit_against_an_unreadable_profile_keeps_the_rows(screen_data: Path) -> None:
+    tab = _open(screen_data)
+    (screen_data / "profile.json").write_text("{ not json", encoding="utf-8")
+
+    run(ProfessionState.save, tab, FIRST_KEY, "Lead")
+
+    assert [row["key"] for row in tab.rows] == [FIRST_KEY, SECOND_KEY]
+    assert tab.error != ""
+    # The row is still on screen, so that is where the error shows.
+    assert tab.error_at == FIRST_KEY
+
+
+def test_an_edit_of_a_row_deleted_in_another_tab_shows_the_error_above_the_list(screen_data: Path) -> None:
+    tab = _open(screen_data)
+    other = _reopen(screen_data)
+    run(ProfessionState.ask_delete, other, SECOND_KEY)
+    run(ProfessionState.confirm_delete, other, SECOND_KEY)
+
+    run(ProfessionState.save, tab, SECOND_KEY, "Lead")
+
+    assert tab.error == "That profession no longer exists in your profile. Reload the page."
+    assert tab.error_at == ""
+    assert [row["key"] for row in tab.rows] == [FIRST_KEY]
