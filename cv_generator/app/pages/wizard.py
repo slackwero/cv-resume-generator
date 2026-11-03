@@ -12,7 +12,7 @@ about how many steps there are nor which one you are on.
 
 import reflex as rx
 
-from cv_generator.app.components.header import data_cell, data_group, legend_strip, page
+from cv_generator.app.components.header import data_cell, data_group, language_switch, legend_strip, page
 from cv_generator.app.components.wizard_steps import (
     application_step,
     experience_step,
@@ -276,6 +276,8 @@ def wizard_page() -> rx.Component:
         _body(),
         _navigation(),
         strip=legend_strip(_step_map(), _strip_notices()),
+        # The CV's language: the same value as the choice in "The application" step.
+        switch=language_switch(WizardState.language, WizardState.change_language),
         data=data_group(
             data_cell("Rail", WizardState.step.to_string() + " / 6"),
             data_cell("Template", WizardState.template),

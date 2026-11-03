@@ -261,6 +261,21 @@ def _field(
     )
 
 
+def _pending_mark(pending: rx.Var) -> rx.Component:
+    """The mark of an item not current in the CV's language, in My profile's words and look.
+
+    In words and not by color alone: "Pending translation" stands next to the other
+    language's text, which the CV prints in its place. The rows say "translation" where
+    My profile's say "missing", so `pending_mark` cannot read them.
+    """
+    return rx.match(
+        pending,
+        ("translation", tag("Pending translation", TEXT_MUTED)),
+        ("review", tag("Pending review")),
+        rx.fragment(),
+    )
+
+
 def _checkbox(**props: object) -> rx.Component:
     """The scheme checkbox: square, amber, no radius.
 
@@ -987,7 +1002,7 @@ def application_step() -> rx.Component:
         ),
         rx.el.div(
             rx.el.label(
-                legend("Label language", color=TEXT_FAINT),
+                legend("CV language", color=TEXT_FAINT),
                 rx.el.select(
                     rx.foreach(
                         WizardState.languages,
@@ -995,12 +1010,15 @@ def application_step() -> rx.Component:
                     ),
                     value=WizardState.language,
                     on_change=WizardState.change_language,
-                    aria_label="Label language",
+                    aria_label="CV language",
                     style={**field_style(), "margin_top": "0.375rem", "max_width": "20rem"},
                 ),
                 style={"display": "block"},
             ),
-            _hint("It translates the section titles and the month in the file name. You write the content."),
+            _hint(
+                "The content comes out in it, with the section titles and the month in the file name. "
+                "It is the same choice as the switch in the top bar."
+            ),
             style={
                 "display": "flex",
                 "flex_direction": "column",
@@ -1030,6 +1048,7 @@ def _profile_option(text: rx.Var) -> rx.Component:
         rx.el.div(
             rx.radio_group.item(value=text["id"], color_scheme="amber", high_contrast=True),
             rx.el.div(
+                _pending_mark(text["pending"]),
                 rx.el.p(
                     rx.cond(expanded, text["text"], text["summary"]),
                     style={
@@ -1037,6 +1056,7 @@ def _profile_option(text: rx.Var) -> rx.Component:
                         "font_size": "0.875rem",
                         "line_height": "1.6",
                         "color": rx.cond(chosen, TEXT, TEXT_FAINT),
+                        "margin_top": rx.cond(text["pending"] != "", "0.375rem", "0"),
                     },
                 ),
                 rx.cond(
@@ -1266,6 +1286,7 @@ def _experience_row(row: rx.Var) -> rx.Component:
                 html_for=experience_id,
                 style={"cursor": "pointer", "min_width": "0"},
             ),
+            _pending_mark(row["pending"]),
             style={
                 "display": "flex",
                 "align_items": "center",
@@ -1288,6 +1309,7 @@ def _experience_row(row: rx.Var) -> rx.Component:
                     # You wrote it or duplicated it in My profile, tagged the same as there. A copy
                     # starts unchecked, and the tag is what tells it apart from its original.
                     rx.cond(row["yours"] == "yes", tag("Yours", solid=True), rx.fragment()),
+                    _pending_mark(row["pending"]),
                     rx.el.label(
                         row["text"],
                         html_for=achievement_id,
@@ -1430,6 +1452,7 @@ def _skill_row(skill: rx.Var, index: rx.Var) -> rx.Component:
                 "min_width": "0",
             },
         ),
+        _pending_mark(skill["pending"]),
         _move_button(
             "chevrons_up",
             "Move " + skill["name"] + " to the top",
@@ -1518,6 +1541,7 @@ def _other_row(row: rx.Var) -> rx.Component:
                     "min_width": "0",
                 },
             ),
+            _pending_mark(row["pending"]),
             style={
                 "display": "flex",
                 "align_items": "center",
@@ -1634,6 +1658,59 @@ def cv_preview() -> rx.Component:
     )
 
 
+def _pending_in_language() -> rx.Component:
+    """What this CV prints that is pending in its language, above the button that generates it.
+
+    It says what the PDF does instead and lists them, and never blocks: the fallback text
+    is a real text, and no mark is ever printed.
+    """
+    return rx.cond(
+        WizardState.pending_in_selection.length() > 0,
+        rx.el.div(
+            rx.icon(
+                "languages",
+                size=15,
+                stroke_width=1.75,
+                style={"color": AMBER, "flex": "0 0 auto", "margin_top": "0.125rem"},
+            ),
+            rx.el.div(
+                rx.el.p(
+                    WizardState.pending_warning,
+                    style={"font_stretch": "100%", "font_size": "0.8125rem", "color": TEXT_FAINT, "line_height": "1.5"},
+                ),
+                rx.el.ul(
+                    rx.foreach(
+                        WizardState.pending_in_selection,
+                        lambda line: rx.el.li(
+                            line,
+                            style={"overflow_wrap": "break-word", "margin_top": "0.25rem"},
+                        ),
+                    ),
+                    style={
+                        "font_stretch": "100%",
+                        "font_size": "0.8125rem",
+                        "color": TEXT,
+                        "line_height": "1.5",
+                        "list_style": "square",
+                        "padding_left": "1.125rem",
+                        "margin_top": "0.5rem",
+                    },
+                ),
+                style={"min_width": "0"},
+            ),
+            style={
+                "display": "flex",
+                "gap": "0.75rem",
+                "align_items": "flex-start",
+                "border": f"1px solid {RULE_LINE}",
+                "padding": "0.75rem 0.875rem",
+                "width": "100%",
+            },
+        ),
+        rx.fragment(),
+    )
+
+
 def final_actions() -> rx.Component:
     """Preview and generate, with the action's error stuck to the buttons.
 
@@ -1642,6 +1719,7 @@ def final_actions() -> rx.Component:
     and the user only sees that nothing happens.
     """
     return rx.el.div(
+        _pending_in_language(),
         rx.el.div(
             secondary_button(
                 rx.icon("eye", size=15, stroke_width=1.75),
