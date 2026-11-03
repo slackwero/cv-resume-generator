@@ -169,7 +169,30 @@ The PDFs are generated in `output/` with the format `initials-role-monthyear.pdf
 
 The interface is in English. Each CV can be generated in English or Spanish: that
 language sets the section titles, the month names and the contact labels printed in the
-PDF. The content is whatever you wrote; the application does not translate text.
+PDF. The application does not translate anything by itself: you write the text.
+
+### Content in two languages
+
+The master profile keeps each text in the language it came in (what LinkedIn feeds) and
+in the other one, English or Spanish, which you write. An EN/ES switch in the top bar of
+Home, My profile and the wizard picks the language you are looking at; the app remembers
+the last choice. In the language LinkedIn feeds, the profile is read-only except for
+what you add by hand. In the other language you edit the profession, the skills, the
+achievements, the role and location of each job, the presentation, the education, the
+courses and the languages.
+
+Two marks tell you what needs attention. **Pending translation** means there is no
+version in this language yet, so the other language's text is shown. **Pending review**
+means the other language changed after this version was written; **Still good** clears
+it. For a short field that needs no translation, **Use the same text** copies it over.
+Home and each My profile subsection count what is pending.
+
+In the wizard the switch and the CV language are the same value, and the CV is built from
+the content in that language. Before generating, it lists the checked items still
+pending; it never blocks. The PDF uses the other language's text where a translation is
+missing and never prints a mark. The LinkedIn sync only feeds the source language: an
+export in the other language is refused with an explanation. CVs already generated never
+change.
 
 ## Matching against the posting
 
