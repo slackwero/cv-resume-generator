@@ -12,23 +12,22 @@ The distinction matters. An empty optional field is not a problem and must not a
 an empty required field is a normal left untied, and it is the only reason a PDF comes
 out with 'PENDING' printed inside.
 
-The switch in the top bar sets the language every subsection is shown and edited in. In
-the other language the profession is not required: left empty, the CV prints the
-source one, and its link says so.
+The switch in the top bar sets the language every subsection is shown and edited in. The
+profession is a list of headlines, each with a version per language; its link is untied
+only while none has text.
 """
 
 import reflex as rx
 
 from cv_generator.app.components.header import data_cell, data_group, language_switch, legend_strip, page
+from cv_generator.app.components.professions import professions_editor
 from cv_generator.app.components.translation_field import (
-    pending_mark,
-    reference_line,
     translation_field,
     translation_notes,
-    version_actions,
 )
 from cv_generator.app.components.work_experience import work_experience
 from cv_generator.app.states.experience_state import ExperienceState
+from cv_generator.app.states.profession_state import ProfessionState
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
 from cv_generator.app.states.translation_state import TranslationState
 from cv_generator.app.styles import (
@@ -66,7 +65,7 @@ def _field(
     label: str,
     value: rx.Var,
     *,
-    required: bool | rx.Var = False,
+    required: bool = False,
     when_unused: str | rx.Var = "Not used",
     mark: rx.Component | None = None,
     notes: rx.Component | None = None,
@@ -78,7 +77,6 @@ def _field(
 
     The label is a real `<label for>` and not loose text above the input: that way the
     screen reader announces the field and clicking the label moves the focus inside.
-    `required` may be a Var, for the profession, which is required in one language only;
     `when_unused` is what an empty field that is not required says. `mark` goes next to
     the label and `notes` right under the field.
     """
@@ -144,28 +142,6 @@ def _grid(*children: rx.Component) -> rx.Component:
     )
 
 
-def _profession_notes() -> rx.Component:
-    """The other language's profession while this one is pending, and what to do with it.
-
-    "Still good" saves right away; "Use the same text" only fills the field, and Save
-    writes it with the rest of the form.
-    """
-    return rx.cond(
-        ProfileState.profession_state != "",
-        rx.el.div(
-            reference_line(ProfileState.reference_language, ProfileState.profession_reference),
-            version_actions(
-                can_confirm=ProfileState.profession_state == "review",
-                on_confirm=ProfileState.confirm_profession,
-                can_copy=ProfileState.profession_copyable,
-                on_same=ProfileState.use_same_profession,
-            ),
-            style={"display": "flex", "flex_direction": "column", "gap": "0.375rem", "margin_top": "0.375rem"},
-        ),
-        rx.fragment(),
-    )
-
-
 def _required() -> rx.Component:
     return panel(
         legend("What the CV needs", color=AMBER),
@@ -183,22 +159,7 @@ def _required() -> rx.Component:
             _field("first_name", "First name", ProfileState.first_name, required=True, placeholder="Jane"),
             _field("last_name", "Last name", ProfileState.last_name, required=True, placeholder="Doe"),
         ),
-        rx.el.div(
-            _field(
-                "profession",
-                "Profession",
-                ProfileState.profession,
-                required=ProfileState.profession_required,
-                # Not required only in the other language with a source profession, which
-                # the CV prints while the field is empty.
-                when_unused="Uses " + ProfileState.reference_language,
-                mark=pending_mark(ProfileState.profession_state),
-                notes=_profession_notes(),
-                placeholder="DevSecOps Engineer",
-                hint="It appears under your name. In each CV you can change it just for that application.",
-            ),
-            style={"margin_top": "1.25rem"},
-        ),
+        rx.el.div(professions_editor(), style={"margin_top": "1.25rem"}),
         rx.el.div(
             _grid(
                 _field(
@@ -588,7 +549,7 @@ def _contact() -> rx.Component:
             rx.cond(
                 ProfileState.has_unsaved_changes & ~ProfileState.saving,
                 note_text(
-                    "You have changes in " + ProfileState.unsaved_languages + " that are not saved yet.",
+                    "You have changes that are not saved yet.",
                     color=AMBER,
                 ),
                 rx.fragment(),
@@ -619,14 +580,13 @@ def _contact() -> rx.Component:
 
 
 def _unsaved_mark() -> rx.Component:
-    """The dot on Contact while it holds changes not saved, seen from any subsection. It
-    names the languages that hold them: the profession has one version in each."""
+    """The dot on Contact while it holds changes not saved, seen from any subsection."""
     return rx.cond(
         ProfileState.has_unsaved_changes,
         rx.el.span(
             rx.el.span("●", aria_hidden="true", style={"color": AMBER, "margin_left": "0.5rem"}),
-            rx.el.span(" (not saved in " + ProfileState.unsaved_languages + ")", style=VISUALLY_HIDDEN),
-            title="Unsaved changes in " + ProfileState.unsaved_languages,
+            rx.el.span(" (not saved)", style=VISUALLY_HIDDEN),
+            title="Unsaved changes",
         ),
         rx.fragment(),
     )
@@ -812,6 +772,7 @@ def profile_page() -> rx.Component:
                 ProfileState.switch_language(code),
                 ExperienceState.show_language,
                 TranslationState.show_language,
+                ProfessionState.show_language,
             ],
         ),
         data=data_group(

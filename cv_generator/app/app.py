@@ -8,6 +8,7 @@ import reflex as rx
 from cv_generator.app.local_only import LocalOnlyMiddleware
 from cv_generator.app.pages import home, profile, sync, wizard
 from cv_generator.app.states.experience_state import ExperienceState
+from cv_generator.app.states.profession_state import ProfessionState
 from cv_generator.app.states.translation_state import TranslationState
 
 # The whole interface is in English: this declares it, so a screen reader reads the
@@ -70,7 +71,7 @@ app.add_page(
     profile.profile_page,
     route="/profile",
     title="My profile",
-    on_load=[profile.ProfileState.start, TranslationState.start, ExperienceState.start],
+    on_load=[profile.ProfileState.start, ProfessionState.start, TranslationState.start, ExperienceState.start],
 )
 app.add_page(
     sync.sync_page,

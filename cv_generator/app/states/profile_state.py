@@ -7,8 +7,9 @@ the profile is shown and edited in, and what is pending in each subsection. The
 achievements of each job live in `ExperienceState`, which the Work experience
 subsection uses.
 
-Only the profession, among the personal details, has a version per language. The other
-details are the same in both, so the form keeps them whatever language is on screen.
+The personal details are the same in both languages, so the form keeps them whatever
+language is on screen. The profession is a list with a version per language and its own
+editor (`ProfessionState`); here it only says whether the CV has a usable one.
 """
 
 import asyncio
@@ -25,12 +26,10 @@ from cv_generator.rendering.i18n import available_languages, language_name
 from cv_generator.services import skills as skill_operations
 from cv_generator.services.photo import MAX_SIZE_BYTES, process_photo, set_photo
 from cv_generator.services.preferences import load_content_language, save_content_language, starting_language
-from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile, with_personal
+from cv_generator.services.profile import PENDING_FIELD, load_profile, pending_fields, save_profile, with_personal
 from cv_generator.services.translations import (
-    PROFESSION_KEY,
     SILENT_FIELDS,
     TextState,
-    after_source_edit,
     confirm,
     other_language,
     pending_by_section,
@@ -44,7 +43,6 @@ from cv_generator.services.translations import (
 FIELD_LABELS = {
     "first_name": "First name",
     "last_name": "Last name",
-    "profession": "Profession",
     "phone": "Phone",
     "email": "Email",
 }
@@ -126,17 +124,11 @@ def text_version(profile: MasterProfile, language: str, key: str, *, silent: boo
     }
 
 
-def _form_values(profile: MasterProfile, language: str) -> dict[str, str]:
-    """The Contact form for this profile in `language`, field by field.
-
-    In the other language the profession is that language's own text, empty while it is
-    missing: the source one is its reference, never its value.
-    """
+def _form_values(profile: MasterProfile) -> dict[str, str]:
+    """The Contact form for this profile, field by field."""
     personal = profile.personal
     values = {field: _without_placeholder(getattr(personal, field)) for field in EDITABLE_FIELDS}
     values["birth_date"] = personal.birth_date.isoformat() if personal.birth_date else ""
-    if language != profile.source_language:
-        values["profession"] = text_version(profile, language, PROFESSION_KEY)["own"]
     return values
 
 
@@ -175,7 +167,6 @@ class ProfileState(rx.State):
 
     first_name: str = ""
     last_name: str = ""
-    profession: str = ""
     phone: str = ""
     email: str = ""
 
@@ -187,16 +178,10 @@ class ProfileState(rx.State):
     # again on Back from another subsection; with this it keeps what you typed and did not
     # save, and the form can say it is not saved yet.
     loaded_fields: dict[str, str] = {}
-    # The profession typed and not saved in a language that is not on screen, by language.
-    # Flipping the switch never carries it into the other language's field.
-    held_professions: dict[str, str] = {}
-    # The profession's version in `language`: "missing", "review" or "" when current; and
-    # the other language's text beside it while it is pending.
-    profession_state: str = ""
-    profession_reference: str = ""
-    # The source profession is empty or still the importer's placeholder: a translation
-    # left empty would print 'PENDING', so the other language has to have one.
-    source_profession_empty: bool = False
+    # The CV has no usable profession yet: every headline is empty or the importer's
+    # placeholder. The list is edited by `ProfessionState`, which asks for the counts again
+    # after each write, and this is read there.
+    profession_pending: bool = False
 
     # The already processed photo, as a data URI: the same string that goes into the CV's `src`.
     photo: str = ""
@@ -242,50 +227,31 @@ class ProfileState(rx.State):
             setattr(self, field, value)
 
     def _move_to(self, code: str) -> None:
-        """Puts the screen in another language. A profession typed and not saved is held
-        in the language it was typed in."""
-        if code == self.language:
-            return
-        loaded = self.loaded_fields.get("profession")
-        if loaded is not None and self.profession != loaded:
-            self.held_professions = {**self.held_professions, self.language: self.profession}
-        # Without a loaded profession, `_read` takes the new language's from disk, or the
-        # one held for it, instead of keeping the old language's typing in its field.
-        self.loaded_fields = {field: value for field, value in self.loaded_fields.items() if field != "profession"}
+        """Puts the screen in another language. What you typed stays: the contact details
+        are the same in both."""
         self.language = code
 
     def _read(self, profile: MasterProfile) -> None:
         """Fills the screen from the profile on disk, in the language on screen.
 
-        It keeps what you typed and did not save: the Contact fields (`kept_typing`) and
-        the profession held for this language while another one was on screen.
+        It keeps what you typed and did not save in the Contact fields (`kept_typing`).
         """
         self.source_language = profile.source_language or ""
-        on_disk = _form_values(profile, self.language)
-        form = kept_typing(self._typed(), self.loaded_fields, on_disk)
-        if self.language in self.held_professions:
-            held = dict(self.held_professions)
-            form["profession"] = held.pop(self.language)
-            self.held_professions = held
-        self._fill(form)
+        on_disk = _form_values(profile)
+        self._fill(kept_typing(self._typed(), self.loaded_fields, on_disk))
         self.loaded_fields = on_disk
-        self._show_profession(profile)
         self.skills = skill_rows(profile, self.language)
         self._count(profile)
-
-    def _show_profession(self, profile: MasterProfile) -> None:
-        version = text_version(profile, self.language, PROFESSION_KEY)
-        self.profession_state = version["state"]
-        self.profession_reference = _without_placeholder(version["reference"])
-        self.source_profession_empty = not _without_placeholder(profile.personal.profession)
 
     def _count(self, profile: MasterProfile) -> None:
         counts = pending_by_section(profile, self.language)
         self.section_counts = {name: str(counts[name]) if counts.get(name) else "" for name in PROFILE_SECTIONS}
+        self.profession_pending = "profession" in pending_fields(profile)
 
     @rx.event
     def refresh_counts(self) -> None:
-        """Counts again, from disk, what is pending in each subsection.
+        """Counts again, from disk, what is pending in each subsection and whether the CV
+        still lacks a profession.
 
         The other states of My profile save on their own and return this after each write.
         """
@@ -295,10 +261,7 @@ class ProfileState(rx.State):
 
     @rx.event
     def switch_language(self, code: str) -> None:
-        """Shows and edits the profile in another language, and remembers the choice.
-
-        What you typed and did not save stays with the language it was typed in.
-        """
+        """Shows and edits the profile in another language, and remembers the choice."""
         if code not in available_languages():
             return
         self.error_message = ""
@@ -344,58 +307,42 @@ class ProfileState(rx.State):
         self.saved = False
 
     @rx.var
-    def profession_required(self) -> bool:
-        """In the source language, always. In the other one only while the source profession
-        is empty or the placeholder: otherwise an empty translation prints the source one."""
-        return self.language == self.source_language or self.source_profession_empty
-
-    @rx.var
-    def profession_copyable(self) -> bool:
-        """Whether "Use the same text" has a source profession to copy."""
-        return self.language != self.source_language and not self.source_profession_empty
-
-    @rx.var
     def reference_language(self) -> str:
         """The name of the other language, which the references are written in."""
         return language_name(other_language(self.language)) if self.language else ""
 
     @rx.var
     def missing(self) -> list[str]:
-        """Labels of the required fields that are still empty."""
+        """Labels of the required fields that are still empty, in the order of the form.
+
+        The profession is not typed here: it is missing while the CV has no usable one.
+        """
         values = {
             "first_name": self.first_name,
             "last_name": self.last_name,
             "phone": self.phone,
             "email": self.email,
         }
-        if self.profession_required:
-            values["profession"] = self.profession
-        return [label for field, label in FIELD_LABELS.items() if field in values and not values[field].strip()]
+        labels = {**FIELD_LABELS, "profession": "Profession"}
+        order = ("first_name", "last_name", "profession", "phone", "email")
+        return [
+            labels[field]
+            for field in order
+            if (self.profession_pending if field == "profession" else not values[field].strip())
+        ]
 
     def _form_differs(self) -> bool:
         return any(value != self.loaded_fields.get(field, value) for field, value in self._typed().items())
 
     # The dependencies are named because the body reads the fields by name.
-    @rx.var(deps=[*EDITABLE_FIELDS, "loaded_fields", "held_professions"], auto_deps=False)
+    @rx.var(deps=[*EDITABLE_FIELDS, "loaded_fields"], auto_deps=False)
     def has_unsaved_changes(self) -> bool:
-        """Whether the form holds something typed and not saved yet, in any language.
+        """Whether the form holds something typed and not saved yet.
 
         It survives leaving the subsection and coming back, so the form says so instead of
         passing for saved.
         """
-        return self._form_differs() or bool(self.held_professions)
-
-    @rx.var(deps=[*EDITABLE_FIELDS, "loaded_fields", "held_professions", "language"], auto_deps=False)
-    def unsaved_languages(self) -> str:
-        """The codes of the languages holding unsaved changes, as "EN, ES".
-
-        The form on screen counts as the language on screen: the fields that are the same
-        in both languages are saved with it.
-        """
-        codes = set(self.held_professions)
-        if self._form_differs():
-            codes.add(self.language)
-        return ", ".join(code.upper() for code in sorted(codes))
+        return self._form_differs()
 
     @rx.var
     def can_save(self) -> bool:
@@ -436,15 +383,14 @@ class ProfileState(rx.State):
             on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
             if on_disk is None:
                 raise ValueError("There is no profile yet. Sync with LinkedIn first.")
-            in_source = self.language == on_disk.source_language
             updated = with_personal(
                 on_disk,
                 PersonalInfo(
                     first_name=self.first_name.strip(),
                     last_name=self.last_name.strip(),
-                    # In the other language the field is a translation: the source
-                    # profession stays as it is on disk.
-                    profession=self.profession.strip() if in_source else on_disk.personal.profession,
+                    # The mirror of the list, kept by the profession services: this form
+                    # does not edit it.
+                    profession=on_disk.personal.profession,
                     phone=self.phone.strip(),
                     email=self.email.strip(),
                     website=self.website.strip() or None,
@@ -453,11 +399,6 @@ class ProfileState(rx.State):
                     birth_date=self._date_or_none(),
                 ),
             )
-            if in_source:
-                updated = after_source_edit(updated, PROFESSION_KEY, on_disk.personal.profession)
-            else:
-                # Empty, it writes no translation: the CV prints the source profession.
-                updated = save_translation(updated, self.language, PROFESSION_KEY, self.profession)
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
             self.error_message = f"The profile could not be saved: {readable(error)}"
@@ -465,47 +406,11 @@ class ProfileState(rx.State):
             return
 
         # The form shows what was written, trimmed, and that is what it now compares against.
-        self.loaded_fields = _form_values(updated, self.language)
+        self.loaded_fields = _form_values(updated)
         self._fill(self.loaded_fields)
-        self._show_profession(updated)
         self._count(updated)
         self.saved = True
         self.saving = False
-
-    @rx.event
-    async def confirm_profession(self) -> None:
-        """ "Still good" on a profession pending review: it is current again, as it is.
-
-        It saves right away, unlike the rest of the form, and leaves what you typed alone.
-        """
-        if self.profession_state != TextState.REVIEW:
-            return
-        self.error_message = ""
-        self.saved = False
-        try:
-            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
-            if on_disk is None:
-                raise ValueError("There is no profile yet. Sync with LinkedIn first.")
-            updated = confirm(on_disk, self.language, PROFESSION_KEY)
-            await asyncio.to_thread(save_profile, DATA_DIR, updated)
-        except (ValueError, OSError) as error:
-            self.error_message = as_sentence(error)
-            return
-
-        self._show_profession(updated)
-        self._count(updated)
-
-    @rx.event
-    def use_same_profession(self) -> None:
-        """ "Use the same text": fills the profession with the source one. Save writes it,
-        like anything typed."""
-        profile = load_profile(DATA_DIR)
-        source = _without_placeholder(profile.personal.profession) if profile is not None else ""
-        # The placeholder is not a profession: there is nothing to copy.
-        if self.language == self.source_language or not source:
-            return
-        self.profession = source
-        self.saved = False
 
     # ------------------------------------------------------------------- photo
 

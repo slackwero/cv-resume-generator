@@ -5,6 +5,7 @@ import pytest
 from cv_generator.app.states import (
     experience_state,
     home_state,
+    profession_state,
     profile_state,
     sync_state,
     translation_state,
@@ -12,7 +13,15 @@ from cv_generator.app.states import (
 )
 
 # Each state module imports `DATA_DIR` by name, so each one is pointed at the folder.
-STATE_MODULES = (experience_state, home_state, profile_state, sync_state, translation_state, wizard_state)
+STATE_MODULES = (
+    experience_state,
+    home_state,
+    profession_state,
+    profile_state,
+    sync_state,
+    translation_state,
+    wizard_state,
+)
 
 
 @pytest.fixture(autouse=True)

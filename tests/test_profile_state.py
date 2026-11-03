@@ -1,4 +1,4 @@
-"""My profile in either language: Contact's profession, the skills and the menu counts.
+"""My profile in either language: Contact, the skills and the menu counts.
 
 The plain fields hold the source language (English here) and the Spanish lives in the
 translations. What you type and do not save belongs to the language it was typed in.
@@ -11,8 +11,9 @@ import pytest
 
 from cv_generator.app.states import profile_state
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
-from cv_generator.models.profile import MasterProfile, Skill, Translation
+from cv_generator.models.profile import MasterProfile, Profession, Skill, Translation
 from cv_generator.services.preferences import load_content_language, save_content_language
+from cv_generator.services.professions import add_profession
 from cv_generator.services.profile import PENDING_FIELD, load_profile, save_profile
 from cv_generator.services.translations import PROFESSION_KEY, TextState, save_translation, state_in, text_key
 from tests.bilingual import sample_profile
@@ -41,12 +42,6 @@ def _screen(data_dir: Path, profile: MasterProfile, language: str = "en") -> Pro
     return state
 
 
-def _profession_in_review() -> MasterProfile:
-    """The Spanish profession was written against an English text that changed since."""
-    stale = Translation(text=SPANISH_PROFESSION, source_text="Cloud Engineer")
-    return sample_profile().model_copy(update={"translations": {"es": {PROFESSION_KEY: stale}}})
-
-
 def _with_a_category() -> MasterProfile:
     """The sample skill with a category and no level, as a hand-written profile may have."""
     return sample_profile().model_copy(update={"skills": [Skill(id="skill-1", name="Kubernetes", category="Cloud")]})
@@ -55,31 +50,27 @@ def _with_a_category() -> MasterProfile:
 # --------------------------------------------------------------------- Contact
 
 
-def test_contact_in_spanish_saves_only_the_spanish_profession(screen_data: Path) -> None:
-    state = _screen(screen_data, sample_profile(), "es")
-    # Missing in Spanish: the field starts empty, with the English as the reference.
-    assert state.profession == ""
-    assert state.profession_state == "missing"
-    assert state.profession_reference == ENGLISH_PROFESSION
-    assert state.section_counts["contact"] == "2"
-    assert not state.profession_required
-    assert state.profession_copyable
+def test_contact_save_keeps_the_professions(screen_data: Path) -> None:
+    """The list has its own editor: Save writes the other details and leaves it alone."""
+    profile = sample_profile()
+    profile.professions.append(Profession(id="p-2", text="Security Architect"))
+    profile = save_translation(profile, "es", text_key("p-2", "text"), "Arquitecta de seguridad")
+    state = _screen(screen_data, profile)
+    before = _on_disk(screen_data)
 
-    run(ProfileState.update, state, "profession", f" {SPANISH_PROFESSION} ")
+    run(ProfileState.update, state, "phone", "+56 9 3333 4444")
     run(ProfileState.save, state)
 
-    profile = _on_disk(screen_data)
-    assert profile.personal.profession == ENGLISH_PROFESSION
-    assert profile.translations["es"][PROFESSION_KEY].text == SPANISH_PROFESSION
+    after = _on_disk(screen_data)
     assert state.saved
-    assert state.profession == SPANISH_PROFESSION
-    assert state.profession_state == ""
-    # The first entry of the list still has no Spanish: it goes away with the slot.
-    assert state.section_counts["contact"] == "1"
+    assert after.personal.phone == "+56 9 3333 4444"
+    assert after.professions == before.professions
+    assert after.personal.profession == ENGLISH_PROFESSION
+    assert after.translations == before.translations
     assert not state.has_unsaved_changes
 
 
-def test_an_empty_spanish_profession_does_not_block_saving(screen_data: Path) -> None:
+def test_saving_contact_in_spanish_does_not_need_a_spanish_profession(screen_data: Path) -> None:
     state = _screen(screen_data, sample_profile(), "es")
     assert state.missing == []
     assert state.can_save
@@ -94,122 +85,53 @@ def test_an_empty_spanish_profession_does_not_block_saving(screen_data: Path) ->
     assert PROFESSION_KEY not in profile.translations.get("es", {})
 
 
-def test_an_empty_english_profession_still_blocks_saving(screen_data: Path) -> None:
-    """The source profession is the one the CV prints when the other language has none."""
-    state = _screen(screen_data, sample_profile())
-
-    run(ProfileState.update, state, "profession", "")
-
-    assert state.missing == ["Profession"]
-    assert not state.can_save
-
-
-def test_a_placeholder_english_profession_makes_the_spanish_one_required(screen_data: Path) -> None:
-    """The importer leaves 'PENDING' where LinkedIn brought no profession. Left empty, the
-    Spanish CV would fall back to it, so the Spanish one is required and nothing is copied."""
+def _without_a_usable_profession() -> MasterProfile:
+    """What the first sync leaves when LinkedIn brought no headline."""
     sample = sample_profile()
-    pending = sample.model_copy(update={"personal": sample.personal.model_copy(update={"profession": PENDING_FIELD})})
-    state = _screen(screen_data, pending, "es")
+    return sample.model_copy(
+        update={
+            "personal": sample.personal.model_copy(update={"profession": PENDING_FIELD}),
+            "professions": [Profession(id="profession-headline", text=PENDING_FIELD)],
+        }
+    )
 
-    assert state.profession_required
+
+def test_contact_is_incomplete_without_a_usable_profession(screen_data: Path) -> None:
+    state = _screen(screen_data, _without_a_usable_profession())
+
     assert state.missing == ["Profession"]
+    assert state.profession_pending
     assert not state.can_save
-    assert not state.profession_copyable
-    run(ProfileState.use_same_profession, state)
-    assert state.profession == ""
+    assert state.missing_summary == "Profession"
 
-    run(ProfileState.update, state, "profession", SPANISH_PROFESSION)
-    run(ProfileState.save, state)
+    # A headline added from the list (which saves on its own) completes it on the next count.
+    save_profile(screen_data, add_profession(_on_disk(screen_data), "Cloud Engineer", "en"))
+    run(ProfileState.refresh_counts, state)
 
-    profile = _on_disk(screen_data)
-    assert state.saved
-    assert profile.personal.profession == PENDING_FIELD
-    assert profile.translations["es"][PROFESSION_KEY].text == SPANISH_PROFESSION
+    assert state.missing == []
+    assert not state.profession_pending
+    assert state.can_save
 
 
-def test_typing_in_english_and_switching_never_saves_it_as_spanish(screen_data: Path) -> None:
+def test_a_headline_written_only_in_the_other_language_completes_contact(screen_data: Path) -> None:
+    state = _screen(screen_data, _without_a_usable_profession(), "es")
+    assert state.missing == ["Profession"]
+
+    save_profile(screen_data, add_profession(_on_disk(screen_data), "Ingeniera de nube", "es"))
+    run(ProfileState.refresh_counts, state)
+
+    assert state.missing == []
+
+
+def test_typing_survives_the_language_switch_because_the_details_are_the_same(screen_data: Path) -> None:
     state = _screen(screen_data, sample_profile())
-    run(ProfileState.update, state, "profession", "Platform Lead")
-
-    run(ProfileState.switch_language, state, "es")
-    assert state.profession == ""
-    run(ProfileState.save, state)
-
-    profile = _on_disk(screen_data)
-    assert profile.personal.profession == ENGLISH_PROFESSION
-    assert PROFESSION_KEY not in profile.translations.get("es", {})
-    assert state.held_professions == {"en": "Platform Lead"}
+    run(ProfileState.update, state, "phone", "+56 9 3333 4444")
     assert state.has_unsaved_changes
-    assert state.unsaved_languages == "EN"
 
-    run(ProfileState.switch_language, state, "en")
+    run(ProfileState.switch_language, state, "es")
 
-    assert state.profession == "Platform Lead"
-    assert state.held_professions == {}
+    assert state.phone == "+56 9 3333 4444"
     assert state.has_unsaved_changes
-    assert state.unsaved_languages == "EN"
-
-
-def test_unsaved_changes_name_every_language_that_holds_them(screen_data: Path) -> None:
-    state = _screen(screen_data, sample_profile())
-    run(ProfileState.update, state, "profession", "Platform Lead")
-    run(ProfileState.switch_language, state, "es")
-
-    run(ProfileState.update, state, "profession", SPANISH_PROFESSION)
-
-    assert state.unsaved_languages == "EN, ES"
-
-
-def test_a_language_changed_in_another_tab_keeps_the_typing_in_its_own_language(screen_data: Path) -> None:
-    """Opening a subsection reads the remembered language again, the way Home does."""
-    state = _screen(screen_data, sample_profile())
-    run(ProfileState.update, state, "profession", "Platform Lead")
-    save_content_language(screen_data, "es")
-
-    run(ProfileState.start, state)
-
-    assert state.language == "es"
-    assert state.profession == ""
-    assert state.held_professions == {"en": "Platform Lead"}
-
-
-def test_editing_the_english_profession_puts_the_spanish_in_review(screen_data: Path) -> None:
-    translated = save_translation(sample_profile(), "es", PROFESSION_KEY, SPANISH_PROFESSION)
-    state = _screen(screen_data, translated)
-
-    run(ProfileState.update, state, "profession", "Security Engineer")
-    run(ProfileState.save, state)
-
-    assert state_in(_on_disk(screen_data), "es", PROFESSION_KEY) is TextState.REVIEW
-    run(ProfileState.switch_language, state, "es")
-    # The Spanish shows its own, older text, with the new English beside it.
-    assert state.profession == SPANISH_PROFESSION
-    assert state.profession_state == "review"
-    assert state.profession_reference == "Security Engineer"
-
-
-def test_still_good_and_same_text_on_the_profession(screen_data: Path) -> None:
-    state = _screen(screen_data, _profession_in_review(), "es")
-    assert state.profession_state == "review"
-
-    run(ProfileState.confirm_profession, state)
-
-    profile = _on_disk(screen_data)
-    assert state_in(profile, "es", PROFESSION_KEY) is TextState.CURRENT
-    assert profile.translations["es"][PROFESSION_KEY].text == SPANISH_PROFESSION
-    assert state.profession_state == ""
-    assert state.profession_reference == ""
-
-    missing = _screen(screen_data, sample_profile(), "es")
-    run(ProfileState.use_same_profession, missing)
-
-    # It fills the field; Save writes it, like anything typed.
-    assert missing.profession == ENGLISH_PROFESSION
-    assert missing.has_unsaved_changes
-    assert PROFESSION_KEY not in _on_disk(screen_data).translations.get("es", {})
-    run(ProfileState.save, missing)
-    assert _on_disk(screen_data).translations["es"][PROFESSION_KEY].text == ENGLISH_PROFESSION
-    assert missing.profession_state == ""
 
 
 def test_a_language_that_cannot_be_remembered_is_still_shown_and_the_failure_is_said(
@@ -224,7 +146,7 @@ def test_a_language_that_cannot_be_remembered_is_still_shown_and_the_failure_is_
     run(ProfileState.switch_language, state, "es")
 
     assert state.language == "es"
-    assert state.profession_state == "missing"
+    assert state.section_counts["contact"] == "2"
     assert state.language_error == "The language could not be remembered: the disk is full"
 
 
@@ -244,7 +166,7 @@ def test_a_switch_that_could_not_be_remembered_survives_opening_a_subsection(
     run(ProfileState.start, state)
 
     assert state.language == "es"
-    assert state.profession_state == "missing"
+    assert state.section_counts["contact"] == "2"
     assert state.language_error == "The language could not be remembered: the disk is full"
 
     # Once a switch is remembered again, opening a subsection reads the file as before.

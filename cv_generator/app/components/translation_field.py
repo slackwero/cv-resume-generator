@@ -12,7 +12,7 @@ same text" copies the source text into a short field of the other language.
 
 `translation_field` is the whole field, for the rows of a list. The pieces it is built
 from (`pending_mark`, `reference_line`, `version_actions`, `translation_notes`) are for
-the fields that keep a layout of their own, like the profession and a skill's name.
+the fields that keep a layout of their own, like a skill's name.
 """
 
 from collections.abc import Callable
