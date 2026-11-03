@@ -9,6 +9,7 @@ from cv_generator.services.profile import (
     available_backups,
     load_profile,
     load_sync_status,
+    pending_fields,
     save_profile,
     save_sync_status,
     with_personal,
@@ -242,3 +243,13 @@ def test_a_translation_without_a_profession_entry_is_not_invented(tmp_path: Path
 
     assert p is not None
     assert p.translations == {}
+
+
+def test_a_pre_list_profile_with_only_a_spanish_profession_is_not_missing_it(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path, profession=PENDING_FIELD)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert p.personal.profession == "Ingeniero DevSecOps"
+    assert "profession" not in pending_fields(p)

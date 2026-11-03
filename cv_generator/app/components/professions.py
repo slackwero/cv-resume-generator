@@ -35,6 +35,9 @@ _SMALL_BUTTON = {"min_height": ["2.75rem", "2.75rem", "2rem"], "padding": "0 0.7
 
 # Why Delete is disabled on the only entry.
 LAST_ONE_REASON = "A CV needs a profession: keep at least one."
+# The note that carries it on screen, so keyboard, touch and screen-reader users reach it
+# too: a `title` alone shows only on mouse hover.
+LAST_ONE_NOTE_ID = "profession-last-reason"
 
 
 def _move_button(direction: str, label: str, offset: int, row: rx.Var) -> rx.Component:
@@ -96,7 +99,7 @@ def _delete_button(row: rx.Var) -> rx.Component:
         type="button",
         on_click=ProfessionState.ask_delete(row["key"]),
         disabled=only_one,
-        title=rx.cond(only_one, LAST_ONE_REASON, ""),
+        aria_describedby=rx.cond(only_one, LAST_ONE_NOTE_ID, ""),
         style=_SMALL_BUTTON,
     )
 
@@ -216,6 +219,10 @@ def professions_editor() -> rx.Component:
         rx.el.div(
             rx.foreach(ProfessionState.rows, _profession_row),
             style={"border_top": f"1px solid {RULE_LINE}", "margin_top": "0.75rem"},
+        ),
+        rx.cond(
+            ProfessionState.rows.length() < 2,
+            note_text(LAST_ONE_REASON, id=LAST_ONE_NOTE_ID, style={"display": "block", "margin_top": "0.5rem"}),
         ),
         _add_form(),
         style={"width": "100%", "min_width": "0"},

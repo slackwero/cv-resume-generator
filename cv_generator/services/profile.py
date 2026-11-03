@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.placeholders import PENDING_FIELD  # noqa: F401  (re-exported: callers import it from here)
+from cv_generator.services.professions import with_profession_mirror
 from cv_generator.services.translations import text_key
 from cv_generator.storage.repo import read_json, save_json
 
@@ -96,6 +97,8 @@ def _upgraded(data_dir: Path, profile: MasterProfile) -> MasterProfile:
             moved = entries.pop(LEGACY_PROFESSION_KEY, None)
             if moved is not None:
                 entries[text_key(FIRST_PROFESSION_ID, "text")] = moved
+        # The headline may have only its Spanish: the mirror must say so, as the wizard does.
+        profile = with_profession_mirror(profile)
     profile.schema_version = 3
     return profile
 

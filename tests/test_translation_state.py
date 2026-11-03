@@ -218,3 +218,33 @@ def test_confirm_in_english_and_same_text_on_a_non_copyable_row_write_nothing(
     spanish = _open(screen_data, language="es")
     run(TranslationState.same_text, spanish, LEVEL_KEY)
     assert saves == []
+
+
+def test_an_edit_against_an_unreadable_profile_keeps_the_rows(screen_data: Path) -> None:
+    tab = _open(screen_data, language="es")
+    (screen_data / "profile.json").write_text("{ not json", encoding="utf-8")
+
+    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
+
+    assert [row["key"] for row in tab.rows["courses"]] == ["course-1.name"]
+    assert tab.error != ""
+    # The row is still on screen, so that is where the error shows.
+    assert tab.error_at == COURSE_KEY
+
+
+def test_an_edit_of_a_row_deleted_in_another_tab_shows_the_error_above_the_list(
+    screen_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tab = _open(screen_data, language="es")
+    save_profile(screen_data, _profile().model_copy(update={"courses": []}))
+
+    def full(data_dir: Path, profile: MasterProfile) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(translation_state, "save_profile", full)
+    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
+
+    assert tab.error == "Nothing was saved: the disk is full."
+    # The row is gone from the refreshed list, so the error shows above it.
+    assert tab.error_at == ""
+    assert tab.rows["courses"] == []

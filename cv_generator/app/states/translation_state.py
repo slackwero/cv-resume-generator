@@ -159,9 +159,12 @@ class TranslationState(rx.State):
             await asyncio.to_thread(save_profile, DATA_DIR, updated)
         except (ValueError, OSError) as error:
             self.error = as_sentence(error)
-            self.error_at = at
-            # Nothing was saved, but the screen may be the stale one.
-            self._show(on_disk)
+            # Nothing was saved, but the screen may be the stale one. A profile that cannot
+            # be read leaves the rows as they are.
+            if on_disk is not None:
+                self._show(on_disk)
+            # An error of a row that is gone shows above the list.
+            self.error_at = at if self._row_of(at) is not None else ""
             return
         self._show(updated)
 

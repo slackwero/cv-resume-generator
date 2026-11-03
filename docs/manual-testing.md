@@ -14,15 +14,14 @@ Use a machine, or a user account, that has never run the app.
   In My profile in ES, edit an achievement, then switch to EN and change the English text
   of that achievement: back in ES it says "Pending review", and "Still good" clears it.
   Add an achievement in EN: in ES it says "Pending translation" and shows the English
-  text. Type the profession in EN without leaving the field, switch to ES: the Spanish
-  field stays empty and nothing was saved as Spanish. In the wizard in ES, the preview of
+  text. In the wizard in ES, the preview of
   a CV with a missing translation shows the English text, no mark, and the step before
   generating lists the pending items without blocking.
 - [ ] **Professions.** In My profile → Contact, add a profession in EN: it says "Pending
   translation" in ES; translate it, leave the field and it saves. Reorder with the arrows
-  and delete one with confirmation; on the last one, Delete is refused with "A CV needs a
-  profession: keep at least one." In the wizard, step 2, the Profession dropdown lists
-  them in the CV's language and a new CV starts on the first; pick another, switch the CV
+  and delete one with confirmation; on the last one, Delete is disabled and the note
+  "A CV needs a profession: keep at least one." shows under the list. In the wizard, step 2,
+  the Profession dropdown lists them in the CV's language and a new CV starts on the first; pick another, switch the CV
   language and the choice stays. Delete a profession a CV used, then clone that CV: the
   clone starts with the first one and says "The profession this CV used is no longer in
   your list, so it starts with the first one."
