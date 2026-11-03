@@ -176,7 +176,7 @@ PDF. The application does not translate anything by itself: you write the text.
 The master profile keeps each text in the language it came in (what LinkedIn feeds) and
 in the other one, English or Spanish, which you write. An EN/ES switch in the top bar of
 Home, My profile and the wizard picks the language you are looking at; the app remembers
-the last choice. The profession, the skill names and the achievements are editable in both
+the last choice. The professions, the skill names and the achievements are editable in both
 languages. The role and location of each job, the presentation, the education, the
 courses, the languages and the category and level of each skill are read-only in the language LinkedIn feeds and editable
 only in the other one.
@@ -193,6 +193,20 @@ pending; it never blocks. The PDF uses the other language's text where a transla
 missing and never prints a mark. The LinkedIn sync only feeds the source language: an
 export in the other language is refused with an explanation. CVs already generated never
 change.
+
+### Professions
+
+The profession is an ordered list of complete headlines, for example "DevSecOps |
+Software Engineer | GCP | AWS", each in English and Spanish. You edit them in
+**My profile → Contact**: add, edit (a change saves when you leave the field or press
+Enter), reorder with the arrows and delete with confirmation. The last one cannot be
+deleted, because a CV needs a profession. The first one is the default for a new CV.
+
+In step 2 of the wizard a **Profession** dropdown lists them in the CV's language, with
+**Add or edit in My profile** and **Refresh list** next to it; changing the CV's language
+keeps your choice. Cloning a CV keeps its profession; if you deleted it since, the clone
+starts with the first one and says so. A profile with a single profession keeps it as the
+first entry, with its Spanish, and is backed up before the first save in the new format.
 
 ## Matching against the posting
 
