@@ -362,6 +362,8 @@ def test_a_draft_typed_in_english_stays_in_english_after_switching(screen_data: 
     assert editor.editing_key == ""
     assert editor.drafts == {}
     assert editor.held_drafts == {"en": {ACHIEVEMENT: "Cut deploy time by half"}}
+    # And the row says so from Spanish, naming the language by its code like Contact.
+    assert editor.held_draft_languages == {ACHIEVEMENT: "EN"}
 
     run(ExperienceState.start_edit, editor, ACHIEVEMENT)
     run(ExperienceState.keep_draft, editor, ACHIEVEMENT, "Reduje el despliegue a la mitad")
@@ -369,6 +371,7 @@ def test_a_draft_typed_in_english_stays_in_english_after_switching(screen_data: 
 
     assert editor.drafts == {ACHIEVEMENT: "Cut deploy time by half"}
     assert editor.held_drafts == {"es": {ACHIEVEMENT: "Reduje el despliegue a la mitad"}}
+    assert editor.held_draft_languages == {ACHIEVEMENT: "ES"}
     # Switching saves neither of them.
     profile = _on_disk(screen_data)
     assert profile.experiences[0].achievements[0].text == ENGLISH

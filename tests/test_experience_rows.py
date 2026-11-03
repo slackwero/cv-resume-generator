@@ -6,9 +6,9 @@ flat list. What the editor does with them is tested in test_experience_state.py.
 
 import pytest
 
-from cv_generator.app.components.work_experience import work_experience
+from cv_generator.app.components.work_experience import _achievement, _add, _editor, work_experience
 from cv_generator.app.pages.profile import profile_page
-from cv_generator.app.states.experience_state import achievement_rows
+from cv_generator.app.states.experience_state import ExperienceState, achievement_rows
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.services.achievements import add_achievement
 from tests import bilingual
@@ -146,3 +146,45 @@ def test_one_click_on_the_switch_moves_my_profile_and_then_the_work_experience()
     click = spanish[: spanish.index("ref:")]
 
     assert click.index("profile_state.switch_language") < click.index("experience_state.show_language")
+
+
+def _conditions_of(tree: object, needle: str, conditions: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    """Each place of a rendered tree that draws `needle`, as the conditions it is drawn under."""
+    if isinstance(tree, dict) and "cond_state" in tree:
+        condition = str(tree["cond_state"])
+        return _conditions_of(tree["true_value"], needle, (*conditions, condition)) + _conditions_of(
+            tree["false_value"], needle, (*conditions, f"not {condition}")
+        )
+    if isinstance(tree, dict):
+        return [found for value in tree.values() for found in _conditions_of(value, needle, conditions)]
+    if isinstance(tree, list):
+        return [found for value in tree for found in _conditions_of(value, needle, conditions)]
+    return [conditions] if isinstance(tree, str) and needle in tree else []
+
+
+def _in_review(path: tuple[str, ...]) -> bool:
+    return any('"review"' in condition and not condition.startswith("not ") for condition in path)
+
+
+def test_at_rest_the_reference_shows_only_in_review_and_in_the_editor_always() -> None:
+    """While missing, the other language's text already stands in for the achievement,
+    marked: an "In English:" line under it would say it twice. In review the two differ.
+    The editor starts empty while missing, so there the reference is what to translate from.
+    """
+    row = ExperienceState.rows[0]
+    at_rest = _conditions_of(_achievement(row).render(), '"In "')
+    editor = _conditions_of(_editor(row).render(), '"In "')
+
+    assert at_rest
+    assert all(_in_review(path) for path in at_rest)
+    assert editor
+    assert not any(_in_review(path) for path in editor)
+
+
+def test_a_draft_held_in_the_other_language_is_said_with_its_code() -> None:
+    row = ExperienceState.rows[0]
+
+    for component in (_achievement(row), _add(row)):
+        notes = _conditions_of(component.render(), "held_draft_languages")
+        assert any("held_draft_languages" in condition for path in notes for condition in path)
+        assert "Switch to " in str(component.render())

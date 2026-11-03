@@ -83,6 +83,24 @@ def _draft_note(key: rx.Var, text: str) -> rx.Component:
     )
 
 
+def _held_draft_note(key: rx.Var, what: str) -> rx.Component:
+    """Says that a language not on screen holds something you typed here and did not send.
+
+    It names that language by its code, like Contact's unsaved mark: the switch is the way
+    back to it.
+    """
+    codes = ExperienceState.held_draft_languages[key]
+    return rx.cond(
+        ExperienceState.held_draft_languages.contains(key),
+        note_text(
+            what + " in " + codes + ". Switch to " + codes + " to finish it.",
+            color=AMBER,
+            style={"display": "block", "margin_top": "0.375rem"},
+        ),
+        rx.fragment(),
+    )
+
+
 def _form_buttons(submit: str, on_cancel: rx.event.EventSpec, *extra: rx.Component) -> rx.Component:
     return rx.el.div(
         primary_button(submit, type="submit", style=_SMALL_BUTTON),
@@ -319,8 +337,10 @@ def _achievement(row: rx.Var) -> rx.Component:
                 ),
                 style={"display": "flex", "align_items": "baseline", "gap": "0.625rem", "flex_wrap": "wrap"},
             ),
+            # Only in review: while missing, the text above is already the other language's,
+            # marked, and its reference would say it twice. The editor shows it either way.
             rx.cond(
-                row["state"] != "",
+                row["state"] == "review",
                 rx.el.div(
                     reference_line(row["reference_language"], row["reference"]),
                     # Long texts are translated, not copied: no "Use the same text" here.
@@ -332,6 +352,7 @@ def _achievement(row: rx.Var) -> rx.Component:
                 rx.fragment(),
             ),
             _draft_note(row["key"], "You have an unsaved change here. Press Edit to finish it."),
+            _held_draft_note(row["key"], "You have an unsaved change here"),
             rx.cond(confirming, _confirmation(row), _row_error(row)),
             # 12rem and not more: at 390px the text has to fit next to the arrows, and the
             # actions are what wraps to the next line.
@@ -420,6 +441,7 @@ def _add(row: rx.Var) -> rx.Component:
                 style=_SMALL_BUTTON,
             ),
             _draft_note(row["key"], "You started a new achievement here. Press + Add achievement to finish it."),
+            _held_draft_note(row["key"], "You started a new achievement here"),
             style={"padding": "0.5rem 0 0.5rem 1.5rem"},
         ),
     )

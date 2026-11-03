@@ -286,6 +286,16 @@ class ExperienceState(rx.State):
         self.language = code
 
     @rx.var
+    def held_draft_languages(self) -> dict[str, str]:
+        """The rows with something typed and not sent in a language not on screen, with the
+        codes of those languages as Contact names them ("EN")."""
+        codes: dict[str, list[str]] = {}
+        for code in sorted(self.held_drafts):
+            for key in self.held_drafts[code]:
+                codes.setdefault(key, []).append(code.upper())
+        return {key: ", ".join(found) for key, found in codes.items()}
+
+    @rx.var
     def in_source(self) -> bool:
         """Whether the language on screen is the one LinkedIn feeds: only there do the
         LinkedIn tag, its text and Restore apply."""
