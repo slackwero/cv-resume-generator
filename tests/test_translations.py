@@ -213,18 +213,26 @@ def test_keys_of_missing_items_or_unknown_fields_are_ignored() -> None:
 
     in_language(p, "es")
     assert "gone-1.text" not in field_states(p, "es")
-    assert pending_totals(p, "es") == (5, 0)
+    assert pending_totals(p, "es") == (6, 0)
 
 
 def test_pending_totals_and_sections() -> None:
     p = sample_profile()
 
-    assert pending_totals(p, "es") == (5, 0)
+    assert pending_totals(p, "es") == (6, 0)
     assert pending_by_section(p, "es")["experience"] == 3
     assert pending_by_section(p, "es")["education"] == 1
-    assert pending_by_section(p, "es")["contact"] == 1
+    assert pending_by_section(p, "es")["contact"] == 2
     assert pending_by_section(p, "es")["skills"] == 0
     assert pending_totals(p, "en") == (0, 0)
+
+
+def test_professions_count_in_the_contact_section() -> None:
+    p = sample_profile()
+
+    assert pending_by_section(p, "es")["contact"] == 2
+    assert field_states(p, "es")["profession-headline.text"] is TextState.MISSING
+    assert in_language(p, "es").professions[0].text == "DevSecOps Engineer"
 
 
 def test_item_marks_say_missing_before_review() -> None:

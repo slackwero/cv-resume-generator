@@ -232,7 +232,7 @@ def test_switching_saves_the_language_and_recounts() -> None:
     run(HomeState.switch_language, state, "es")
 
     assert state.language == "es"
-    assert state.pending_summary == "ES · 4 pending translation"
+    assert state.pending_summary == "ES · 5 pending translation"
     assert load_content_language(home_state.DATA_DIR) == "es"
 
 
@@ -281,5 +281,5 @@ def test_a_language_that_cannot_be_saved_is_still_shown_and_the_failure_is_said(
     run(HomeState.switch_language, state, "es")
 
     assert state.language == "es"
-    assert state.pending_summary == "ES · 4 pending translation"
+    assert state.pending_summary == "ES · 5 pending translation"
     assert state.message.startswith("The language could not be remembered:")

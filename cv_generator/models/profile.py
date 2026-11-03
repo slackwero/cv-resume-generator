@@ -174,6 +174,21 @@ class Reference(BaseModel):
     email: str | None = None
 
 
+# The id of the entry the upgrade creates from the headline a profile had before the list.
+# Fixed because the upgrade runs on every load until the next save, and translations and
+# recipes point at this id.
+FIRST_PROFESSION_ID = "profession-headline"
+
+
+class Profession(BaseModel):
+    """One complete headline for under the name, as it should print."""
+
+    id: str = Field(default_factory=_generate_id("profession"))
+
+    # Empty only for a headline written in the other language alone, like an achievement.
+    text: Annotated[str, StringConstraints(strip_whitespace=True)] = ""
+
+
 class Translation(BaseModel):
     """One item's text in the language that is not the source language."""
 
@@ -195,12 +210,15 @@ class MasterProfile(BaseModel):
     user edits it; no CV modifies it.
     """
 
-    schema_version: int = 2
+    schema_version: int = 3
 
     # The language LinkedIn feeds, so what the importers write is always in it. None only
     # in a profile saved before this field existed; loading fills it in.
     source_language: str | None = None
     personal: PersonalInfo
+    # The headlines a CV can print under the name, in the owner's order. The first is the
+    # default for a new CV.
+    professions: list[Profession] = Field(default_factory=list)
     profile_texts: list[ProfileText] = Field(default_factory=list)
     experiences: list[Experience] = Field(default_factory=list)
     education: list[Education] = Field(default_factory=list)

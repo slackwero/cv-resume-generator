@@ -2,8 +2,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from cv_generator.models.profile import Achievement, Experience, MasterProfile, PersonalInfo
+from cv_generator.models.profile import Achievement, Experience, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.profile import (
+    PENDING_FIELD,
     SyncStatus,
     available_backups,
     load_profile,
@@ -12,6 +13,7 @@ from cv_generator.services.profile import (
     save_sync_status,
     with_personal,
 )
+from cv_generator.services.translations import TextState, state_in, text_in
 from tests.test_models_personal import REQUIRED
 
 PHOTO = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
@@ -114,7 +116,7 @@ def test_an_old_profile_takes_its_source_language_from_the_last_sync(tmp_path: P
 
     assert profile is not None
     assert profile.source_language == "es"
-    assert profile.schema_version == 2
+    assert profile.schema_version == 3
 
 
 def test_an_old_profile_never_synced_is_english(tmp_path: Path) -> None:
@@ -137,4 +139,106 @@ def test_the_first_save_over_an_old_profile_backs_it_up_once(tmp_path: Path) -> 
     backups = available_backups(tmp_path)
     assert len(backups) == 1
     assert json.loads(backups[0].read_text())["schema_version"] == 1
-    assert json.loads((tmp_path / "profile.json").read_text())["schema_version"] == 2
+    assert json.loads((tmp_path / "profile.json").read_text())["schema_version"] == 3
+
+
+KEY = "profession-headline.text"
+
+
+def _write_v2_profile(
+    data_dir: Path, *, agreed_text: str | None = None, profession: str = "DevSecOps Engineer"
+) -> None:
+    entry = {"text": "Ingeniero DevSecOps", "source_text": "DevSecOps Engineer"}
+    if agreed_text is not None:
+        entry["agreed_text"] = agreed_text
+    profile = {
+        "schema_version": 2,
+        "source_language": "en",
+        "personal": {**REQUIRED, "profession": profession},
+        "translations": {"es": {"personal.profession": entry}},
+    }
+    (data_dir / "profile.json").write_text(json.dumps(profile))
+
+
+def test_a_schema_2_profile_gets_its_profession_as_the_first_entry(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert p.schema_version == 3
+    assert p.professions == [Profession(id="profession-headline", text="DevSecOps Engineer")]
+    assert state_in(p, "es", KEY) is TextState.CURRENT
+    assert text_in(p, "es", KEY) == "Ingeniero DevSecOps"
+    assert "personal.profession" not in p.translations["es"]
+
+
+def test_a_review_state_survives_the_move(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path, agreed_text="Ingeniero de DevSecOps")
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert p.translations["es"][KEY].agreed_text == "Ingeniero de DevSecOps"
+    assert state_in(p, "en", KEY) is TextState.REVIEW
+
+
+def test_a_schema_1_profile_comes_out_at_schema_3_with_both_upgrades(tmp_path: Path) -> None:
+    _write_v1_profile(tmp_path)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert (p.schema_version, p.source_language) == (3, "en")
+    assert [x.text for x in p.professions] == [REQUIRED["profession"]]
+
+
+def test_a_pending_profession_becomes_a_one_entry_list_holding_the_placeholder(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path, profession=PENDING_FIELD)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert [x.text for x in p.professions] == [PENDING_FIELD]
+
+
+def test_a_profile_that_already_has_the_list_is_left_alone(tmp_path: Path) -> None:
+    mine = MasterProfile(personal=REQUIRED, professions=[Profession(id="p-1", text="Mine")])
+    save_profile(tmp_path, mine)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert p.professions == [Profession(id="p-1", text="Mine")]
+
+
+def test_the_first_save_over_a_schema_2_profile_backs_it_up_once(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path)
+    p = load_profile(tmp_path)
+    assert p is not None
+
+    save_profile(tmp_path, p)
+    save_profile(tmp_path, p)
+
+    backups = available_backups(tmp_path)
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text())["schema_version"] == 2
+    assert json.loads((tmp_path / "profile.json").read_text())["schema_version"] == 3
+
+
+def test_loading_twice_gives_the_same_first_entry_id(tmp_path: Path) -> None:
+    _write_v2_profile(tmp_path)
+
+    first, second = load_profile(tmp_path), load_profile(tmp_path)
+
+    assert first is not None and second is not None
+    assert first.professions[0].id == second.professions[0].id == "profession-headline"
+
+
+def test_a_translation_without_a_profession_entry_is_not_invented(tmp_path: Path) -> None:
+    _write_v1_profile(tmp_path)
+
+    p = load_profile(tmp_path)
+
+    assert p is not None
+    assert p.translations == {}

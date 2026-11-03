@@ -61,7 +61,7 @@ def test_contact_in_spanish_saves_only_the_spanish_profession(screen_data: Path)
     assert state.profession == ""
     assert state.profession_state == "missing"
     assert state.profession_reference == ENGLISH_PROFESSION
-    assert state.section_counts["contact"] == "1"
+    assert state.section_counts["contact"] == "2"
     assert not state.profession_required
     assert state.profession_copyable
 
@@ -74,7 +74,8 @@ def test_contact_in_spanish_saves_only_the_spanish_profession(screen_data: Path)
     assert state.saved
     assert state.profession == SPANISH_PROFESSION
     assert state.profession_state == ""
-    assert state.section_counts["contact"] == ""
+    # The first entry of the list still has no Spanish: it goes away with the slot.
+    assert state.section_counts["contact"] == "1"
     assert not state.has_unsaved_changes
 
 
@@ -356,11 +357,12 @@ def test_menu_counts_follow_the_language(screen_data: Path) -> None:
 
     run(ProfileState.switch_language, state, "es")
 
-    # The profession; the role, location and achievement of the job; the study's title.
+    # The profession twice (its slot and the first entry of the list, until the slot goes);
+    # the role, location and achievement of the job; the study's title.
     # A missing skill name is not pending.
     assert state.section_counts == {
         **dict.fromkeys(PROFILE_SECTIONS, ""),
-        "contact": "1",
+        "contact": "2",
         "experience": "3",
         "education": "1",
     }

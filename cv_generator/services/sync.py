@@ -14,7 +14,7 @@ from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.linkedin_pdf import import_from_pdf
 from cv_generator.importers.linkedin_zip import import_from_zip
 from cv_generator.importers.merge import Change, ChangeKind, apply_changes, compute_diff
-from cv_generator.models.profile import MasterProfile, PersonalInfo
+from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
 from cv_generator.rendering.i18n import language_name
 from cv_generator.services.profile import (
     PENDING_FIELD,
@@ -91,7 +91,9 @@ def create_initial_profile(personal: PartialPersonalInfo) -> MasterProfile:
             email=personal.email or PENDING_FIELD,
             website=personal.website,
             country=personal.country,
-        )
+        ),
+        # Same entry the upgrade would create, so the profile reads back from disk unchanged.
+        professions=[Profession(id=FIRST_PROFESSION_ID, text=personal.profession or PENDING_FIELD)],
     )
 
 

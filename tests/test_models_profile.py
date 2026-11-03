@@ -60,7 +60,8 @@ def test_a_new_master_profile_requires_only_personal_info() -> None:
 
     assert profile.experiences == []
     assert profile.skills == []
-    assert profile.schema_version == 2
+    assert profile.schema_version == 3
+    assert profile.professions == []
 
 
 def test_master_profile_survives_a_json_round_trip() -> None:

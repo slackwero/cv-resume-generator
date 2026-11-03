@@ -6,7 +6,7 @@ import pytest
 
 from cv_generator.importers.base import PartialPersonalInfo, ProfileDraft
 from cv_generator.importers.merge import Change, ChangeKind, compute_diff
-from cv_generator.models.profile import Achievement, Experience, MasterProfile, Skill
+from cv_generator.models.profile import FIRST_PROFESSION_ID, Achievement, Experience, MasterProfile, Profession, Skill
 from cv_generator.services.achievements import add_achievement_in, edit_achievement
 from cv_generator.services.profile import load_profile, load_sync_status, restore_backup, save_profile
 from cv_generator.services.sync import (
@@ -249,6 +249,7 @@ def _synced_profile() -> MasterProfile:
     return MasterProfile(
         source_language="en",
         personal=REQUIRED,
+        professions=[Profession(id=FIRST_PROFESSION_ID, text=REQUIRED["profession"])],
         experiences=[
             Experience(
                 company="Northwind",
@@ -366,6 +367,21 @@ def test_the_first_sync_sets_the_source_language(tmp_path: Path) -> None:
 
     saved = load_profile(tmp_path)
     assert saved is not None and saved.source_language == "es"
+
+
+def test_the_first_sync_creates_the_list_from_the_headline(tmp_path: Path) -> None:
+    profile = create_initial_profile(PartialPersonalInfo(profession="DevSecOps Engineer"))
+
+    synced = _sync(profile, _draft_with(), tmp_path)
+
+    assert [(x.id, x.text) for x in synced.professions] == [("profession-headline", "DevSecOps Engineer")]
+    assert profile_unchanged(synced, load_profile(tmp_path))
+
+
+def test_a_first_sync_without_a_headline_holds_the_placeholder(tmp_path: Path) -> None:
+    profile = create_initial_profile(PartialPersonalInfo())
+
+    assert [x.text for x in profile.professions] == ["PENDING"]
 
 
 def test_a_later_sync_keeps_the_source_language(tmp_path: Path) -> None:

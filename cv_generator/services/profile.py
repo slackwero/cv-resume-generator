@@ -8,7 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from cv_generator.models.profile import MasterProfile, PersonalInfo
+from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
+from cv_generator.services.translations import PROFESSION_KEY, text_key
 from cv_generator.storage.repo import read_json, save_json
 
 PROFILE_FILE = "profile.json"
@@ -82,13 +83,20 @@ def pending_fields(profile: MasterProfile) -> list[str]:
 
 
 def _upgraded(data_dir: Path, profile: MasterProfile) -> MasterProfile:
-    """The profile as schema 2, in memory; the file is only rewritten by a save."""
+    """The profile as schema 3, in memory; the file is only rewritten by a save."""
     if profile.source_language is None:
         # LinkedIn fed the profile in the language of the last sync; never synced means
         # the profile was typed in by hand, in English.
         status = load_sync_status(data_dir)
         profile.source_language = status.detected_language if status else "en"
-    profile.schema_version = 2
+    if not profile.professions:
+        profile.professions = [Profession(id=FIRST_PROFESSION_ID, text=profile.personal.profession)]
+        # The Spanish of the old single headline now belongs to the first entry, intact.
+        for entries in profile.translations.values():
+            moved = entries.pop(PROFESSION_KEY, None)
+            if moved is not None:
+                entries[text_key(FIRST_PROFESSION_ID, "text")] = moved
+    profile.schema_version = 3
     return profile
 
 
@@ -108,15 +116,15 @@ def load_profile(data_dir: Path) -> MasterProfile | None:
 def save_profile(data_dir: Path, profile: MasterProfile) -> None:
     """Persists the master profile.
 
-    The first save over a profile from before schema 2 keeps a copy of it: the upgrade
+    The first save over a profile from before schema 3 keeps a copy of it: the upgrade
     adds fields an older version of the app would drop.
     """
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / PROFILE_FILE
     # Read the file, not the profile: the profile was already upgraded in memory.
-    if path.is_file() and read_json(path).get("schema_version", 1) < 2:
+    if path.is_file() and read_json(path).get("schema_version", 1) < 3:
         backup_profile(data_dir, datetime.now())
-    save_json(path, profile.model_copy(update={"schema_version": 2}).model_dump(mode="json"))
+    save_json(path, profile.model_copy(update={"schema_version": 3}).model_dump(mode="json"))
 
 
 def with_personal(profile: MasterProfile, personal: PersonalInfo) -> MasterProfile:

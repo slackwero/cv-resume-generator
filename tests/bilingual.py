@@ -1,6 +1,14 @@
 """A small bilingual profile shared by the tests of the translation features."""
 
-from cv_generator.models.profile import Achievement, Education, Experience, MasterProfile, PersonalInfo, Skill
+from cv_generator.models.profile import (
+    Achievement,
+    Education,
+    Experience,
+    MasterProfile,
+    PersonalInfo,
+    Profession,
+    Skill,
+)
 
 
 def sample_profile() -> MasterProfile:
@@ -14,6 +22,8 @@ def sample_profile() -> MasterProfile:
             phone="+56 9 1111 2222",
             email="ana@example.com",
         ),
+        # What a loaded profile always has: the upgrade writes the headline as the first entry.
+        professions=[Profession(id="profession-headline", text="DevSecOps Engineer")],
         experiences=[
             Experience(
                 id="exp-1",

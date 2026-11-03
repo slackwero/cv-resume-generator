@@ -17,8 +17,9 @@ from cv_generator.rendering.i18n import available_languages
 PROFESSION_KEY = "personal.profession"
 
 # The profile lists and the fields of their items that have a version per language.
-# Achievements (their "text", nested in experiences) and the profession are handled besides.
+# Achievements (their "text", nested in experiences) and the personal profession are handled besides.
 FIELDS: dict[str, tuple[str, ...]] = {
+    "professions": ("text",),
     "profile_texts": ("text",),
     "experiences": ("role", "location"),
     "education": ("title",),
@@ -41,6 +42,7 @@ SECTION_OF: dict[str, str] = {
     "courses": "courses",
     "languages": "languages",
     "skills": "skills",
+    "professions": "contact",
     "personal": "contact",
 }
 
