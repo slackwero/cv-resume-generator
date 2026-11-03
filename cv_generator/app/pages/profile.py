@@ -30,6 +30,7 @@ from cv_generator.app.components.translation_field import (
 from cv_generator.app.components.work_experience import work_experience
 from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.states.profile_state import PROFILE_SECTIONS, ProfileState
+from cv_generator.app.states.translation_state import TranslationState
 from cv_generator.app.styles import (
     AMBER,
     AMBER_INACTIVE,
@@ -489,11 +490,39 @@ def _skills() -> rx.Component:
     )
 
 
+def _text_row(row: rx.Var, *, long: bool) -> rx.Component:
+    """One text of a subsection, with the facts of its item (institution, dates) above it.
+
+    A presentation is long: it is translated, not copied, so it has no "Use the same text".
+    """
+    return rx.el.div(
+        rx.cond(row["context"] != "", note_text(row["context"], style={"display": "block"}), rx.fragment()),
+        translation_field(
+            row,
+            on_save=TranslationState.save_text,
+            on_submit=TranslationState.save_from_form,
+            on_confirm=TranslationState.confirm,
+            on_same=None if long else TranslationState.same_text,
+            multiline=long,
+        ),
+        style={"display": "flex", "flex_direction": "column", "gap": "0.25rem"},
+    )
+
+
 def _texts(name: str) -> rx.Component:
-    """A subsection of the texts only LinkedIn writes, in the language on screen."""
+    """A subsection of the texts LinkedIn feeds: read-only in the source language, translated
+    by hand in the other one."""
     return panel(
         legend(PROFILE_SECTIONS[name], color=AMBER),
-        note_text("Nothing here came from LinkedIn.", style={"display": "block", "margin_top": "0.75rem"}),
+        _error_notice(TranslationState.error, margin_top="0.75rem"),
+        rx.cond(
+            TranslationState.rows[name].length() > 0,
+            rx.el.div(
+                rx.foreach(TranslationState.rows[name], lambda row: _text_row(row, long=name == "presentation")),
+                style={"display": "flex", "flex_direction": "column", "gap": "1rem", "margin_top": "0.75rem"},
+            ),
+            note_text("Nothing here came from LinkedIn.", style={"display": "block", "margin_top": "0.75rem"}),
+        ),
         style={"width": "100%", "padding": "1.5rem"},
     )
 
@@ -769,11 +798,15 @@ def profile_page() -> rx.Component:
         rx.cond(ProfileState.has_profile, _form(), _without_profile()),
         strip=rx.cond(ProfileState.has_profile, legend_strip(_strip()), rx.fragment()),
         # One click: My profile switches and remembers the language, then the Work
-        # experience follows it. Wired here and not in `switch_language`: ExperienceState
+        # experience and the translated texts follow it. Wired here and not in `switch_language`: ExperienceState
         # imports ProfileState, so ProfileState cannot import it back.
         switch=language_switch(
             ProfileState.language,
-            lambda code: [ProfileState.switch_language(code), ExperienceState.show_language],
+            lambda code: [
+                ProfileState.switch_language(code),
+                ExperienceState.show_language,
+                TranslationState.show_language,
+            ],
         ),
         data=data_group(
             data_cell(
