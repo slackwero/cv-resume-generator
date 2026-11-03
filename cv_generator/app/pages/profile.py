@@ -797,8 +797,8 @@ def profile_page() -> rx.Component:
     """Editing of the master profile by subsection, in the language of the switch."""
     return page(
         "My profile",
-        "Your contact details, your photo, your skills and the achievements of each job. "
-        "The jobs themselves come in and are updated from the LinkedIn sync.",
+        "Your contact details, your photo, your skills and the achievements of each job, "
+        "in English and in Spanish. The jobs themselves come in and are updated from the LinkedIn sync.",
         # Above the subsections, so it is seen from whichever one is open.
         _error_notice(ProfileState.language_error, margin_top="0"),
         rx.cond(ProfileState.has_profile, _form(), _without_profile()),

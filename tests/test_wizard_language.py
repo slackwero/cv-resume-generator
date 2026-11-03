@@ -20,7 +20,7 @@ from cv_generator.models.cv import CVContent, GeneratedCV, SelectedExperience, S
 from cv_generator.models.profile import Achievement, MasterProfile, ProfileText
 from cv_generator.models.sections import SectionKind
 from cv_generator.rendering.i18n import default_sections, load_language
-from cv_generator.services.generation import save_cv
+from cv_generator.services.generation import load_cv, save_cv
 from cv_generator.services.preferences import load_content_language, save_content_language
 from cv_generator.services.profile import SyncStatus, save_profile, save_sync_status
 from cv_generator.services.translations import PROFESSION_KEY, save_translation, text_key
@@ -107,6 +107,15 @@ def _cloned_cv(data_dir: Path, profile: MasterProfile) -> str:
     return cv.cv_id
 
 
+def _clone_with_header(data_dir: Path, profile: MasterProfile, header: str) -> WizardState:
+    """Clones the Spanish CV after rewriting its recipe to carry `header` as its header profession."""
+    cv_id = _cloned_cv(data_dir, profile)
+    cv = load_cv(data_dir, cv_id)
+    cv.selection = cv.selection.model_copy(update={"header_profession": header})
+    save_cv(data_dir, cv)
+    return _open(data_dir, profile, f"/new?from={cv_id}")
+
+
 def _cannot_save(monkeypatch: pytest.MonkeyPatch) -> None:
     def full(data_dir: Path, language: str) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
@@ -189,6 +198,25 @@ def test_changing_language_keeps_the_choices(screen_data: Path) -> None:
     assert load_content_language(screen_data) == "es"
 
 
+def test_a_clone_stored_with_the_profession_in_the_other_language_prints_it_in_its_own(screen_data: Path) -> None:
+    # The CV was made before the profession had a Spanish version, so it stored the English one.
+    profile = save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES)
+
+    state = _clone_with_header(screen_data, profile, PROFESSION)
+
+    assert state.language == "es"
+    assert state.header_profession == PROFESSION_ES
+    assert "Profession" not in state.pending_in_selection
+
+
+def test_a_clone_keeps_a_header_profession_written_for_that_cv(screen_data: Path) -> None:
+    profile = save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES)
+
+    state = _clone_with_header(screen_data, profile, "Ingeniera de seguridad")
+
+    assert state.header_profession == "Ingeniera de seguridad"
+
+
 def test_the_profile_profession_follows_the_language_and_yours_stays(screen_data: Path) -> None:
     state = _open(screen_data, save_translation(_profile(), "es", PROFESSION_KEY, PROFESSION_ES))
     assert state.header_profession == PROFESSION
@@ -235,6 +263,16 @@ def test_a_language_that_cannot_be_remembered_still_changes_and_says_so(
     assert state.language == "es"
     assert _row(state, "exp-1|ach-1")["text"] == CUT_ES
     assert state.message.startswith("The language could not be remembered: ")
+
+
+def test_a_language_switch_keeps_the_guidance_of_a_clone_not_found(screen_data: Path) -> None:
+    state = _open(screen_data, address="/new?from=missing")
+    message = state.message
+    assert "was not found" in message
+
+    run(WizardState.change_language, state, "es")
+
+    assert state.message == message
 
 
 def test_an_unknown_language_is_ignored(screen_data: Path) -> None:
@@ -318,6 +356,18 @@ def test_the_warning_counts_only_checked_pending_items(screen_data: Path) -> Non
         "1 checked item is pending in Spanish. Where a text has no Spanish version the PDF uses the "
         "English one; where it is pending review, the Spanish text as it stands."
     )
+
+
+def test_a_hidden_section_takes_its_pending_items_out_of_the_warning(screen_data: Path) -> None:
+    save_content_language(screen_data, "es")
+    state = _open(screen_data)
+
+    run(WizardState.toggle_section, state, "education", False)
+    run(WizardState.toggle_section, state, "experience", False)
+    assert state.pending_in_selection == ["Profession", PRESENTATION]
+
+    run(WizardState.toggle_section, state, "profile", False)
+    assert state.pending_in_selection == ["Profession"]
 
 
 def test_nothing_pending_says_nothing(screen_data: Path) -> None:

@@ -176,9 +176,9 @@ PDF. The application does not translate anything by itself: you write the text.
 The master profile keeps each text in the language it came in (what LinkedIn feeds) and
 in the other one, English or Spanish, which you write. An EN/ES switch in the top bar of
 Home, My profile and the wizard picks the language you are looking at; the app remembers
-the last choice. The profession, the skills and the achievements are editable in both
+the last choice. The profession, the skill names and the achievements are editable in both
 languages. The role and location of each job, the presentation, the education, the
-courses and the languages are read-only in the language LinkedIn feeds and editable
+courses, the languages and the category and level of each skill are read-only in the language LinkedIn feeds and editable
 only in the other one.
 
 Two marks tell you what needs attention. **Pending translation** means there is no

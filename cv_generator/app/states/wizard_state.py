@@ -44,7 +44,14 @@ from cv_generator.services.photo import set_photo
 from cv_generator.services.preferences import load_content_language, save_content_language, starting_language
 from cv_generator.services.profile import load_profile, pending_fields, with_personal
 from cv_generator.services.system import ViewerUnavailable, open_with_viewer
-from cv_generator.services.translations import TextState, in_language, item_marks, other_language
+from cv_generator.services.translations import (
+    PROFESSION_KEY,
+    TextState,
+    in_language,
+    item_marks,
+    other_language,
+    text_in,
+)
 from cv_generator.tailoring.keywords import analyze_coverage, mentioned_terms
 from cv_generator.tailoring.resolver import resolve_content
 from cv_generator.text import plural
@@ -71,6 +78,8 @@ PENDING_MARKS = {TextState.MISSING: "translation", TextState.REVIEW: "review"}
 
 # The profession's line in the list of what is pending.
 PROFESSION_LABEL = "Profession"
+# The start of the message `_remember_language` leaves; the switch clears only that one.
+LANGUAGE_NOT_REMEMBERED = "The language could not be remembered: "
 
 # The preview is always written to the same file and refreshed with a counter in the
 # URL: a new name per render would leave an orphan PDF every time.
@@ -606,7 +615,7 @@ class WizardState(rx.State):
         self._prepare_sections()
         self.template = previous.template
         self.profile_text_id = recipe.profile_text_id or self.profile_text_id
-        self.header_profession = recipe.header_profession or self.profession_in_language
+        self.header_profession = self._clone_header_profession(recipe.header_profession)
         self.include_photo = recipe.include_photo
         self._set_style(recipe.style)
 
@@ -1043,6 +1052,19 @@ class WizardState(rx.State):
         self._refresh_template_views()
         self._invalidate_preview()
 
+    def _clone_header_profession(self, stored: str | None) -> str:
+        """The profession a clone prints: the profile's, in the CV's language, unless you wrote one.
+
+        The wizard stores the header even when it was the profile's profession, so a stored
+        text equal to the profile's profession in any language is that profession, not an
+        override; kept as is it would stay in the language it was made in.
+        """
+        if not stored or self._profile is None:
+            return self.profession_in_language
+        if any(stored == text_in(self._profile, code, PROFESSION_KEY) for code in available_languages()):
+            return self.profession_in_language
+        return stored
+
     def _follow_profession(self, previous: str) -> None:
         """The header profession taken from the profile follows it; one you wrote for this CV stays.
 
@@ -1071,7 +1093,8 @@ class WizardState(rx.State):
         """
         if language not in available_languages():
             return
-        self.message = ""
+        if self.message.startswith(LANGUAGE_NOT_REMEMBERED):
+            self.message = ""
         if language == self.language:
             # Nothing to redo, and the preview still holds; the click still says which language
             # the next page opens in.
@@ -1104,7 +1127,7 @@ class WizardState(rx.State):
         try:
             save_content_language(DATA_DIR, self.language)
         except OSError as error:
-            self.message = f"The language could not be remembered: {readable(error)}"
+            self.message = f"{LANGUAGE_NOT_REMEMBERED}{readable(error)}"
 
     @rx.var
     def pending_in_selection(self) -> list[str]:
@@ -1112,12 +1135,21 @@ class WizardState(rx.State):
 
         Only what is checked: an achievement counts while its job is checked too, since the
         selection drops it with the job. The profile's profession counts while it is the one
-        printed, the header's own or, left empty, the profile's.
+        printed, the header's own or, left empty, the profile's. A section hidden for this CV
+        prints nothing, so what it holds does not count.
         """
+        section_of = {
+            **{text["id"]: str(SectionKind.PROFILE) for text in self.profile_texts_list},
+            **{row["key"]: str(SectionKind.EXPERIENCE) for row in self.experience_rows},
+            **{skill["id"]: str(SectionKind.SKILLS) for skill in self.skills},
+            **{item["id"]: item["group"] for item in self.other_items},
+        }
         lines = []
         if self.profession_pending and self.header_profession in ("", self.profession_in_language):
             lines.append(PROFESSION_LABEL)
         for key in self.pending_marks:
+            if not self.visible_sections.get(section_of.get(key, ""), True):
+                continue
             if key in self.marked_achievements:
                 experience_id = key.split("|")[0]
                 chosen = self.marked_achievements[key] and self.marked_items.get(experience_id, False)

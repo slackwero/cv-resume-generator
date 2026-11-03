@@ -7,6 +7,18 @@ app's folder.
 
 Use a machine, or a user account, that has never run the app.
 
+## On every platform
+
+- [ ] **Bilingual content.** On Home, press ES in the top bar: the Home count shows what
+  is pending in Spanish, and My profile and the wizard open in ES (Sync has no switch).
+  In My profile in ES, edit an achievement, then switch to EN and change the English text
+  of that achievement: back in ES it says "Pending review", and "Still good" clears it.
+  Add an achievement in EN: in ES it says "Pending translation" and shows the English
+  text. Type the profession in EN without leaving the field, switch to ES: the Spanish
+  field stays empty and nothing was saved as Spanish. In the wizard in ES, the preview of
+  a CV with a missing translation shows the English text, no mark, and the step before
+  generating lists the pending items without blocking.
+
 ## macOS
 
 - [ ] **Download.** On GitHub, click Code → Download ZIP. In Finder, double-click the ZIP.
@@ -83,15 +95,6 @@ Regenerate cannot replace it and says to close it and try again.
 - [ ] **Rename.** Click Rename on a CV, change the name and press Enter: the list shows
   the new name and the PDF in `output/` is unchanged. Rename again and press Escape: the
   name stays as it was.
-- [ ] **Bilingual content.** On Home, press ES in the top bar: the Home count shows what
-  is pending in Spanish, and My profile and the wizard open in ES (Sync has no switch).
-  In My profile in ES, edit an achievement, then switch to EN and change the English text
-  of that achievement: back in ES it says "Pending review", and "Still good" clears it.
-  Add an achievement in EN: in ES it says "Pending translation" and shows the English
-  text. Type the profession in EN without leaving the field, switch to ES: the Spanish
-  field stays empty and nothing was saved as Spanish. In the wizard in ES, the preview of
-  a CV with a missing translation shows the English text, no mark, and the step before
-  generating lists the pending items without blocking.
 - [ ] **Stop with Ctrl+C.** Start with `start.bat`, press Ctrl+C in its window. The app
   stops and the port is free: `netstat -ano | findstr :3000` prints nothing.
 - [ ] **Stop by closing the window.** Start with `start.bat` and close the window. The
