@@ -47,9 +47,12 @@ ul { list-style: none; margin: 0; padding: 0; }
 .contact__item:not(:last-child)::after { content: "  |  "; color: var(--accent); }
 
 .section { margin-bottom: 6.5mm; }
+/* The spacing in em, so it keeps its proportion at any CV size. At 1.5pt pdfminer, the base
+   of many resume parsers, read the titles letter by letter ("W O R K   E X P E R I E N C E");
+   at 1pt it still split them with one of the fonts (measured 2026-11-07). */
 .section__title { font-family: var(--heading-font); font-size: calc(11pt * var(--scale));
                    font-weight: 400; text-transform: uppercase;
-                   letter-spacing: 1.5pt; text-align: center; color: var(--accent);
+                   letter-spacing: 0.06em; text-align: center; color: var(--accent);
                    margin: 0 0 3.5mm; }
 
 .profile { margin: 0; text-align: justify; font-size: calc(10.5pt * var(--scale)); }

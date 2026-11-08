@@ -1,6 +1,7 @@
 """Contract every template must meet, whatever its design."""
 
 import io
+import re
 from collections.abc import Iterator
 from datetime import date
 from typing import TYPE_CHECKING
@@ -31,6 +32,7 @@ from cv_generator.rendering.renderer import (
     render_pdf,
 )
 from cv_generator.rendering.styles import PALETTE
+from tests.pdf_text import extracted_texts
 from tests.test_models_personal import REQUIRED
 from tests.test_photo import sample_photo
 from tests.test_template_contrast import _to_rgb, _variables
@@ -210,18 +212,20 @@ def test_the_pdf_text_is_readable_by_an_ats(slug: str, font: StyleFont | None, c
 
     A high letter-spacing makes the extractor return "C A R E E R": the CV looks
     flawless and still no ATS recognizes the section or the keywords. That is why the
-    contract requires every title and every piece of data to come out whole. It is
+    contract requires every title and every piece of data to come out whole, for every
+    extractor in tests/pdf_text.py: pdfminer splits a spacing that pypdf still joins (real
+    case 2026-11-07: Executive's titles came out "W O R K   E X P E R I E N C E"). It is
     repeated with each font because the spacing one tolerates can split the words of
     another.
     """
     pdf = render_pdf(content, slug, today=date(2026, 8, 27), language="es", style=Style(font=font))
-    text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf)).pages).upper()
 
-    for title in CUSTOM_TITLES.values():
-        assert title.upper() in text, f"{slug} with {font} splits '{title}' when extracting the PDF text"
-
-    for piece in ["JANE", "DOE", "ACME AIRLINES", "KUBERNETES", "SAST"]:
-        assert piece in text, f"{slug} with {font} splits '{piece}' when extracting the PDF text"
+    for extractor, extracted in extracted_texts(pdf).items():
+        text = re.sub(r"[ \t]+", " ", extracted).upper()
+        for title in CUSTOM_TITLES.values():
+            assert title.upper() in text, f"{slug} with {font} splits '{title}' in {extractor}"
+        for piece in ["JANE", "DOE", "ACME AIRLINES", "KUBERNETES", "SAST"]:
+            assert piece in text, f"{slug} with {font} splits '{piece}' in {extractor}"
 
 
 @pytest.fixture
