@@ -363,9 +363,10 @@ def _thumbnail(template: rx.Var) -> rx.Component:
 def _ats_badge(template: rx.Var) -> rx.Component:
     """Marks the templates meant to pass an automated filter (`ats` in their meta.json).
 
-    It sits on the thumbnail's corner, in solid amber: it is a fact about the template,
-    not a state of the card, so it does not change when it is chosen. The `title`
-    explains the acronym to whoever does not know it.
+    It sits on the thumbnail's top right corner, in solid amber: it is a fact about the
+    template, not a state of the card, so it does not change when it is chosen. On the left
+    it covered the name, which the ATS templates print first. The `title` explains the
+    acronym to whoever does not know it.
     """
     return rx.cond(
         template["ats"] != "",
@@ -376,7 +377,7 @@ def _ats_badge(template: rx.Var) -> rx.Component:
                 **style_legend(GLASS),
                 "position": "absolute",
                 "top": "0.375rem",
-                "left": "0.375rem",
+                "right": "0.375rem",
                 "background": AMBER,
                 "padding": "0.125rem 0.375rem",
                 "letter_spacing": "0.08em",
