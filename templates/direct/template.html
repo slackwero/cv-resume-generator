@@ -1,9 +1,9 @@
 {% import "_macros.html" as m %}
 {#
-  Direct: a color band with the name and, below, each section in a row with its title on
-  the left. Meant for ATS filters: the HTML is a single reading line (name, contact and
-  the sections in the wizard order), with no photo or sidebar, and each row's layout only
-  puts the title next to its content.
+  Direct: a color band with the name and, below, each section with its title on a line of
+  its own and its content below it. Meant for ATS filters: no photo
+  or sidebar, and the page is drawn in reading order (name, contact and the sections in
+  the wizard order), because the PDF is written in the order the page is drawn.
 #}
 {% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
   {{ m.header(cv, age, with_photo=false) }}

@@ -75,7 +75,8 @@ Spanish (`i18n/`). The interface itself is in English.
   fabricated. It is the user's rule, not a technical limitation.
 - **The PDF must stay readable by an ATS.** `tests/test_templates.py` checks it: a high
   `letter-spacing` makes the extractor return text split letter by letter, and no
-  automated filter recognizes the section.
+  automated filter recognizes the section. The "ATS" badge goes only to the templates
+  that `tests/test_ats.py` measures as read whole and in order.
 - **No database.** Everything is JSON under `data/`, which holds personal data and is
   excluded from git.
 - **No external services or LLMs** in the generation path.

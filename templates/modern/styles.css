@@ -68,9 +68,14 @@ ul { list-style: none; margin: 0; padding: 0; }
 .achievements { margin: 1.5mm 0 0; padding-left: 5mm; list-style: disc; }
 .achievements li { margin-bottom: 1mm; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 1.5mm 2mm; }
-.chips li { background: #f5f7fa; border: 1px solid #e4e7eb; border-radius: 2mm;
-            padding: 0.8mm 2.2mm; font-size: calc(9pt * var(--scale)); }
+/* The box goes on the item and the dot after it, outside the box: with only a gap between
+   boxes, parsers read "Python GitLab CI AWS Security Hub" and cannot tell where each skill
+   ends (measured 2026-11-07 with tests/test_ats.py). */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5mm 0; }
+.chips li { display: flex; align-items: center; font-size: calc(9pt * var(--scale)); }
+.chips__item { display: inline-block; background: #f5f7fa; border: 1px solid #e4e7eb; border-radius: 2mm;
+               padding: 0.8mm 2.2mm; }
+.chips li:not(:last-child)::after { content: "·"; color: #6c7885; margin: 0 1mm; }
 .chips__level::before { content: " · "; color: #6c7885; }
 
 .list li { margin-bottom: 1mm; }

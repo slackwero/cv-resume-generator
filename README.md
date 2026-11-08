@@ -274,16 +274,23 @@ Five designs in `templates/`. Three are single-column, one per typographic voice
 `technical` (monospace metadata and a green accent). `sidebar` has two columns: a color
 bar with the photo, the contact details, the skills and the languages, and the body with
 the profile text and the work history. `direct` puts the name in a color band and each
-section in a row with its title on the left.
+section under its title, in a single column.
 
 ![The five templates: direct, executive, modern, sidebar and technical](docs/screenshots/templates.png)
 
-`direct` is the template meant for ATS filters, and it declares `"ats": true` in its
-`meta.json`: the step 1 carousel gives it an "ATS" badge. An ATS template carries no
-photo (the test contract requires it), its HTML is a single reading line and its section
-titles fit on one line, because split in two a filter reads them as two labels. Every
-template passes the ATS-readable text test; the badge marks the one that was also
-designed for it.
+The step 1 carousel gives an "ATS" badge to the templates that declare `"ats": true` in
+their `meta.json`, today `direct` and `technical`. The badge is measured, not declared:
+`tests/test_ats.py` renders a three-page CV with each template, reads the PDF with three
+extractors (pypdf, pypdf by position and pdfminer, the base of many resume parsers) and
+requires the name first, each section title on a line of its own followed by its content,
+each role next to its company and as written, the achievements whole and in order, and
+something between two skills to split on, with every font of the wizard. A template that
+passes and prints no photo must carry the badge, and one that carries it must pass.
+`modern` reads cleanly too but can print the photo; `executive` centers its titles and
+pdfminer reads some of them after their content; `sidebar` reads its bar ahead of the
+name. What counts is the PDF, not the HTML: the PDF is written in the order the page is
+drawn, so a profession shown above the name, or a title floated beside its content, comes
+out in that order whatever the HTML says.
 
 There used to be six, but four shared the font stack and the structure: at thumbnail
 size they could not be told apart, so choosing between them meant paying the cost of
@@ -371,9 +378,9 @@ no photo yet, step 2 opens My profile in another tab (going back to `/new` would
 the wizard) and "I uploaded it" brings the photo in without touching anything else.
 
 Every template must pass the contract in `tests/test_templates.py`, which checks among
-other things that the PDF text stays **readable by an ATS** (a high `letter-spacing`
-makes the extractor return `C A R E E R` and no automated filter recognizes the
-section).
+other things that the PDF text stays **readable by an ATS** with every extractor in
+`tests/pdf_text.py` (a high `letter-spacing` makes pdfminer return `C A R E E R` and no
+automated filter recognizes the section).
 
 ## Data
 

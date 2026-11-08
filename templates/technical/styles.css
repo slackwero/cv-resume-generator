@@ -52,7 +52,11 @@ ul { list-style: none; margin: 0; padding: 0; }
 .section { margin-bottom: 5.5mm; }
 .section__title { font-family: var(--data-font); font-size: calc(9pt * var(--scale));
                    font-weight: 700; color: var(--accent); margin: 0 0 2.5mm; }
-.section__title::before { content: "// "; color: #6d7883; }
+/* The "//" is drawn, not written: as text it went into the title, and a parser looking for
+   "Work Experience" read "// Work Experience" (measured 2026-11-07 with tests/test_ats.py). */
+.section__title::before { content: ""; display: inline-block; width: 1.25em; height: 0.85em;
+                          margin-right: 0.45em; vertical-align: -0.05em;
+                          background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'><path d='M1.5 10 4.5 0M6.5 10 9.5 0' stroke='%236d7883' stroke-width='1.3' fill='none'/></svg>") no-repeat left center / contain; }
 
 .profile { margin: 0; }
 
@@ -71,9 +75,14 @@ ul { list-style: none; margin: 0; padding: 0; }
 .achievements li { margin-bottom: 1mm; padding-left: 4.5mm; position: relative; }
 .achievements li::before { content: "▸"; position: absolute; left: 0; color: var(--accent); }
 
-.chips { display: flex; flex-wrap: wrap; gap: 1.2mm; }
-.chips li { font-family: var(--data-font); font-size: calc(8.2pt * var(--scale));
-            background: #f6f8fa; border: 1px solid #d0d7de; color: #24292f; padding: 0.6mm 1.8mm; }
+/* The tag goes on the item and the dot after it, outside the tag: with only a gap between
+   tags, parsers read "Python GitLab CI AWS Security Hub" and cannot tell where each skill
+   ends (measured 2026-11-07 with tests/test_ats.py). */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2mm 0; }
+.chips li { display: flex; align-items: center; font-family: var(--data-font);
+            font-size: calc(8.2pt * var(--scale)); color: #24292f; }
+.chips__item { display: inline-block; background: #f6f8fa; border: 1px solid #d0d7de; padding: 0.6mm 1.8mm; }
+.chips li:not(:last-child)::after { content: "·"; color: #6d7883; margin: 0 0.8mm; }
 .chips__level { color: #57606a; }
 .chips__level::before { content: ":"; }
 

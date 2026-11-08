@@ -1,12 +1,13 @@
-/* Direct: a color band with the name, and each section with its title on the left.
+/* Direct: a color band with the name, and each section under its title, in one column.
  *
  * What the CV can customize lives in the variables below, with the template's own values.
  * The style chosen in the wizard then appends a second block that overrides only what was
  * chosen. `--background` paints the band and `--tint` the secondary text on it; `--accent`
  * the section titles. The scale multiplies every font size, not the margins.
  *
- * Meant for ATS filters: no photo, no reading columns and little letter spacing, so the
- * text extracted from the PDF comes out whole and in order.
+ * Meant for ATS filters: no photo, no reading columns, no forced uppercase and little letter
+ * spacing, so the text extracted from the PDF comes out whole and in order. tests/test_ats.py
+ * measures it with several extractors: what counts is the PDF, not the HTML.
  */
 :root {
   --accent: #3b6b54;
@@ -41,31 +42,32 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .header { background: var(--background); color: #ffffff; padding: 11mm 16mm 8mm; }
 .header__text { display: flex; flex-direction: column; }
-/* The profession shows above the name, but in the HTML it comes after: the extracted text
-   starts with the name, which is the first thing a filter looks for. */
-.header .header__profession { order: -1; color: var(--tint); margin: 0 0 1mm;
-                                     font-size: calc(10pt * var(--scale)); font-weight: 600; }
+/* The name goes first on the page too: the PDF is written in the order the page is drawn,
+   not in the order of the HTML, and the name is the first thing a filter looks for.
+   Real case 2026-11-07: with the profession above it, every extractor read it first. */
 .header .header__name { font-family: var(--heading-font); color: #ffffff;
                                   font-size: calc(26pt * var(--scale)); font-weight: 700;
-                                  line-height: 1.1; margin: 0 0 3mm; }
+                                  line-height: 1.1; margin: 0 0 1.5mm; }
+.header .header__profession { color: var(--tint); margin: 0 0 3mm;
+                                     font-size: calc(10pt * var(--scale)); font-weight: 600; }
 .header .contact { display: flex; flex-wrap: wrap; color: var(--tint);
                         font-size: calc(8.5pt * var(--scale)); }
 .contact__item:not(:last-child)::after { content: "|"; margin: 0 2mm; }
 
 /* --- Sections ------------------------------------------------------------------------ */
 
-/* The title floats on the left and the content stays in the normal flow: WeasyPrint did
-   not split a grid row across pages, and the whole work history jumped to page 2. The
-   title column is wide so a typical title fits on one line even in monospace: split in
-   two, an ATS filter reads it as two labels. */
+/* The title on a line of its own and the content below it, from the same edge: no column
+   of titles. Real case 2026-11-07, measured with tests/test_ats.py: with the title floated
+   on the left, the PDF wrote every title ahead of all the content (a float is painted apart
+   from the text around it); beside its content, an extractor that rebuilds lines by
+   position read the title and the content's first line as one line; and above content
+   indented 55 mm, another read the titles as a column of their own, apart from what they
+   name. */
 .body { padding: 2mm 16mm 0; }
 .section { padding: 5mm 0; border-bottom: 0.3mm solid #dde2e0; }
-.section::after { content: ""; display: block; clear: both; }
 .section:last-child { border-bottom: 0; }
-.section__title { float: left; width: 48mm; font-family: var(--heading-font);
-                   color: var(--accent); margin: 0; font-size: calc(10pt * var(--scale));
-                   font-weight: 600; line-height: 1.3; }
-.section__body { margin-left: 55mm; }
+.section__title { font-family: var(--heading-font); color: var(--accent); margin: 0 0 2mm;
+                   font-size: calc(10pt * var(--scale)); font-weight: 600; line-height: 1.3; }
 
 .profile { margin: 0; }
 
@@ -78,10 +80,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 .entry__identity { display: inline; }
 .entry__title { display: inline; font-family: var(--heading-font); margin: 0;
                    font-size: calc(8.8pt * var(--scale)); font-weight: 700;
-                   text-transform: uppercase; letter-spacing: 0.2pt; color: #22272b; }
+                   letter-spacing: 0.2pt; color: #22272b; }
 .entry__sub { display: inline; margin: 0; font-size: calc(8.8pt * var(--scale));
-                font-weight: 700; text-transform: uppercase; letter-spacing: 0.2pt;
-                color: #22272b; }
+                font-weight: 700; letter-spacing: 0.2pt; color: #22272b; }
 .entry__sub::before { content: "|"; margin: 0 1.6mm; font-weight: 400; color: #6b757c; }
 .entry__place { font-size: calc(8pt * var(--scale)); font-weight: 400; color: #5f6b73; }
 .entry__place::before { content: "\A"; white-space: pre; }
@@ -89,7 +90,7 @@ ul { list-style: none; margin: 0; padding: 0; }
    to the next line, the bar stays at the end of its own line instead of opening the new one. */
 .entry__place::after { content: "|"; margin-left: 1.6mm; }
 .entry__dates { display: inline; margin: 0; font-size: calc(8pt * var(--scale));
-                   text-transform: uppercase; letter-spacing: 0.2pt; color: #5f6b73;
+                   letter-spacing: 0.2pt; color: #5f6b73;
                    white-space: nowrap; }
 .entry__dates::before { content: "\A"; white-space: pre; }
 .entry--with-place .entry__dates { margin-left: 1mm; }
@@ -106,7 +107,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .chips__level::after { content: ")"; }
 
 .chips--languages li { display: block; margin-bottom: 2.4mm; font-weight: 700;
-                     text-transform: uppercase; letter-spacing: 0.2pt;
+                     letter-spacing: 0.2pt;
                      font-size: calc(8.8pt * var(--scale)); }
 .chips--languages li:not(:last-child)::after { content: none; }
 .chips--languages .chips__level { display: block; font-weight: 400;
@@ -114,7 +115,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .chips--languages .chips__level::before, .chips--languages .chips__level::after { content: none; }
 
 .list li { margin-bottom: 2.4mm; }
-.list__main { display: block; font-weight: 700; text-transform: uppercase;
+.list__main { display: block; font-weight: 700;
                     letter-spacing: 0.2pt; font-size: calc(8.8pt * var(--scale)); }
 .list__secondary, .list__meta { font-size: calc(8.5pt * var(--scale)); color: #5f6b73; }
 .list__secondary + .list__meta::before,

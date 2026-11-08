@@ -63,6 +63,12 @@ FONTS: dict[StyleFont, FontPair] = {
     StyleFont.PROFESSIONAL: FontPair("'Gill Sans', sans-serif", "'Gill Sans', sans-serif"),
 }
 
+# Fonts whose kerning pulls two letters so close that an extractor reads a space between
+# them. Real case 2026-11-07: with Gill Sans, pypdf read "T erraform" and "Tailspin T oys",
+# and a filter searching for Terraform would not find it. Without kerning the text reads
+# whole, and the page barely changes.
+UNKERNED_FONTS = {StyleFont.PROFESSIONAL}
+
 SCALES: dict[FontSize, float] = {
     FontSize.SMALL: 0.92,
     FontSize.MEDIUM: 1.0,
@@ -95,6 +101,8 @@ SIZE_NAMES: dict[FontSize, str] = {
 
 def css_for_style(style: Style) -> str:
     """`:root` block with the variables of the fields that are set; empty if there are none.
+
+    A font in `UNKERNED_FONTS` also turns kerning off, so its text stays readable by an ATS.
 
     Declaring only what was chosen is what lets each template keep the rest of its
     design, and lets an empty style add not a single character to the CSS.
@@ -130,7 +138,10 @@ def css_for_style(style: Style) -> str:
         variables += [("--entry-break", "auto"), ("--break-after-header", "avoid")]
 
     body = "\n".join(f"  {name}: {value};" for name, value in variables)
-    return f":root {{\n{body}\n}}"
+    css = f":root {{\n{body}\n}}"
+    if style.font in UNKERNED_FONTS:
+        css += "\nbody { font-kerning: none; }"
+    return css
 
 
 def line_height_step(current: float, direction: int) -> float:

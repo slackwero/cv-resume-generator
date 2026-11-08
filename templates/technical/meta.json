@@ -2,6 +2,7 @@
   "name": "Technical",
   "description": "Monospace dates and metadata, square tags and a terminal green accent. For engineering profiles where the stack takes center stage.",
   "supports_photo": false,
+  "ats": true,
   "line_height": 1.45,
   "supported_sections": [
     "profile",

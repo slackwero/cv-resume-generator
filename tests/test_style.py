@@ -111,6 +111,12 @@ def test_every_palette_color_meets_aa(color: PaletteColor) -> None:
     assert _contrast(_to_rgb(tones.tint), _to_rgb(tones.background)) >= 4.5
 
 
+def test_a_font_whose_kerning_splits_words_is_set_unkerned() -> None:
+    """Gill Sans kerns "Te" and "To" so tightly that pypdf reads "T erraform" (2026-11-07)."""
+    assert "font-kerning: none" in css_for_style(Style(font=StyleFont.PROFESSIONAL))
+    assert "font-kerning" not in css_for_style(Style(font=StyleFont.CLASSIC))
+
+
 @pytest.mark.parametrize("font", list(StyleFont))
 def test_every_font_stack_ends_in_a_generic_family(font: StyleFont) -> None:
     """Outside the user's Mac, the stack falls back to something readable instead of the engine's default font."""

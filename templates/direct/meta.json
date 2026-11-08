@@ -1,6 +1,6 @@
 {
   "name": "Direct",
-  "description": "A color band with the name, and each section with its title on the left. A single reading line, real text and no photo: meant to get through ATS filters.",
+  "description": "A color band with the name and each section under its title, in a single column. Real text, no photo and read in order by the parsers: meant to get through ATS filters.",
   "supports_photo": false,
   "ats": true,
   "line_height": 1.45,

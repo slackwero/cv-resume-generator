@@ -102,17 +102,20 @@
       </article>
     {% endfor %}
 
+  {#- Each chip's text goes in `chips__item`: a template that draws the chip as a box puts the
+      box there, and a separator after it (`li::after`) stays outside the box as real text,
+      which is what lets a parser tell one item from the next. -#}
   {% elif kind == 'skills' %}
     <ul class="chips">
       {% for skill in cv.skills %}
-        <li>{{ skill.name }}{% if skill.level %}<span class="chips__level">{{ skill.level }}</span>{% endif %}</li>
+        <li><span class="chips__item">{{ skill.name }}{% if skill.level %}<span class="chips__level">{{ skill.level }}</span>{% endif %}</span></li>
       {% endfor %}
     </ul>
 
   {% elif kind == 'languages' %}
     <ul class="chips chips--languages">
       {% for language in cv.languages %}
-        <li>{{ language.language }}{% if language.level %}<span class="chips__level">{{ language.level }}</span>{% endif %}</li>
+        <li><span class="chips__item">{{ language.language }}{% if language.level %}<span class="chips__level">{{ language.level }}</span>{% endif %}</span></li>
       {% endfor %}
     </ul>
 
@@ -129,7 +132,7 @@
 
   {% elif kind == 'hobbies' %}
     <ul class="chips chips--hobbies">
-      {% for hobby in cv.hobbies %}<li>{{ hobby.text }}</li>{% endfor %}
+      {% for hobby in cv.hobbies %}<li><span class="chips__item">{{ hobby.text }}</span></li>{% endfor %}
     </ul>
 
   {% elif kind == 'references' %}
