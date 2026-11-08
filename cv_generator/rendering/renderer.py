@@ -27,6 +27,13 @@ if TYPE_CHECKING:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
 
+# No CV is kerned. The font that draws it depends on the computer, and some pull two
+# letters so close that an extractor reads a space between them: pypdf read "T erraform"
+# and "Tailspin T oys" with Gill Sans on a Mac (2026-11-07), and with DejaVu Sans, the
+# stand-in Linux draws for the Mac fonts (2026-11-08). A filter searching for Terraform
+# would not find it. Without kerning the text reads whole, and the page barely changes.
+UNKERNED_CSS = "html { font-kerning: none; }"
+
 
 class TemplateMeta(BaseModel):
     """What a template declares about itself in its meta.json."""
@@ -107,7 +114,7 @@ def render_html(
     template = _build_environment().get_template(f"{slug}/template.html")
     translations = load_language(language)
 
-    css = (directory / "styles.css").read_text(encoding="utf-8")
+    css = (directory / "styles.css").read_text(encoding="utf-8") + "\n" + UNKERNED_CSS
     if style is not None and not style.empty:
         css = css + "\n" + css_for_style(style)
 

@@ -458,6 +458,15 @@ def test_the_template_declares_the_style_variables(slug: str) -> None:
 
 
 @pytest.mark.parametrize("slug", TEMPLATES)
+def test_no_text_is_kerned(slug: str, content: CVContent) -> None:
+    """Kerning made pypdf read "T erraform": with Gill Sans on a Mac, and with DejaVu Sans,
+    Linux's stand-in for the Mac fonts. Which font draws the CV depends on the computer."""
+    kernings = {style["font_kerning"] for _, style in _boxes(render_html(content, slug, language="es"))}
+
+    assert kernings == {"none"}
+
+
+@pytest.mark.parametrize("slug", TEMPLATES)
 def test_changing_the_color_changes_what_is_drawn(slug: str, content: CVContent) -> None:
     red = _to_rgb(PALETTE[PaletteColor.RED].accent)
 

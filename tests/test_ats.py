@@ -194,7 +194,9 @@ def test_an_ats_template_reads_cleanly_with_every_font(slug: str, font: StyleFon
     """The badge holds whatever font the CV picks in the wizard.
 
     Real case 2026-11-07: with Gill Sans every template came out "T erraform" and
-    "Tailspin T oys" in pypdf, from the font's kerning between those letters.
+    "Tailspin T oys" in pypdf, from the font's kerning between those letters. And on
+    2026-11-08 the same with Modern and Tech on Linux, where DejaVu Sans stands in for
+    Avenir Next and Helvetica Neue: the font that draws the CV depends on the computer.
     """
     problems = _problems(slug, font)
 
