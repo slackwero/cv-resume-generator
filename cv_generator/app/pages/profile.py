@@ -465,10 +465,10 @@ def _text_row(row: rx.Var, *, long: bool) -> rx.Component:
         ),
         translation_field(
             row,
-            on_save=TranslationState.save_text,
+            on_save=TranslationState.save,
             on_submit=TranslationState.save_from_form,
             on_confirm=TranslationState.confirm,
-            on_same=None if long else TranslationState.same_text,
+            on_same=None if long else TranslationState.same,
             multiline=long,
         ),
         style={"display": "flex", "flex_direction": "column", "gap": "0.25rem"},

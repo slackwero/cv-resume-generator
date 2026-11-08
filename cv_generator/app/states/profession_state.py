@@ -5,26 +5,17 @@ change saves right away, the way the skills and achievements do, and not through
 Contact's Save button.
 """
 
-import asyncio
-from collections.abc import Callable
 from typing import Any
 
 import reflex as rx
 
-from cv_generator.app.config import DATA_DIR
-from cv_generator.app.errors import as_sentence, readable
 from cv_generator.app.focus import focus_on
 from cv_generator.app.states.profile_state import ProfileState, text_version
+from cv_generator.app.states.text_list_state import TextListMixin, WriteEvents
 from cv_generator.models.profile import MasterProfile
 from cv_generator.services import professions as operations
 from cv_generator.services.placeholders import is_usable_text
-from cv_generator.services.profile import load_profile, save_profile
 from cv_generator.services.translations import TextState, text_key
-from cv_generator.services.translations import confirm as confirm_version
-
-# What a write returns: the menu counts and the "What the CV needs" status read again from
-# disk, since the write may have changed them.
-WriteEvents = list[rx.event.EventSpec | rx.event.EventHandler]
 
 # Where an error of the add form shows: no row has this key.
 ADD_FORM = "add"
@@ -85,57 +76,22 @@ def _focus_after_delete(rows: list[dict[str, str]], key: str) -> str:
     return f"translation-{neighbour['key']}"
 
 
-class ProfessionState(rx.State):
-    """Adds, edits, reorders and deletes the headlines of the master profile."""
+class ProfessionState(TextListMixin, rx.State):
+    """Adds, edits, reorders and deletes the headlines of the master profile.
+
+    Loading, following the language, saving and "Still good" come from `TextListMixin`.
+    An error may also show in the add form (`ADD_FORM`).
+    """
 
     rows: list[dict[str, str]] = []
-    # The language the list is shown in, always the one the rest of My profile shows
-    # (`ProfileState.language`); and the one LinkedIn feeds.
-    language: str = ""
-    source_language: str = ""
-    error: str = ""
-    # Where the error shows: a row key, `ADD_FORM`, or empty for the whole list.
-    error_at: str = ""
     # The row whose delete question is open.
     confirming_key: str = ""
 
-    @rx.event
-    async def start(self) -> None:
-        """Loads the profile from disk, in the language the rest of My profile shows.
-
-        It runs after `ProfileState.start` in the page's on_load and takes the language
-        from it: after a switch that could not be remembered, the file holds the one before.
-        """
-        self.language = await self._screen_language()
-        self.confirming_key = ""
-        await self._reload()
-
-    @rx.event
-    async def show_language(self) -> None:
-        """Follows the switch, which `ProfileState.switch_language` handles first in the same click."""
-        language = await self._screen_language()
-        if language == self.language:
-            return
-        self.language = language
-        self.confirming_key = ""
-        await self._reload()
-
-    async def _screen_language(self) -> str:
-        return (await self.get_state(ProfileState)).language
-
     async def _reload(self) -> None:
-        """Shows the profile on disk. One that cannot be read shows as an error, not a crash."""
-        self._clear_error()
-        try:
-            profile = await asyncio.to_thread(load_profile, DATA_DIR)
-        except (ValueError, OSError) as error:
-            self.error = f"Your profile could not be read: {readable(error)}"
-            profile = None
-        self._show(profile)
-
-    def _clear_error(self) -> None:
-        self.error = ""
-        self.error_at = ""
+        """Opening the screen and switching the language draw the list again, with no delete
+        question open."""
+        self.confirming_key = ""
+        await super()._reload()
 
     def _show(self, profile: MasterProfile | None) -> None:
         if profile is None:
@@ -146,37 +102,10 @@ class ProfessionState(rx.State):
         self.rows = profession_rows(profile, self.language)
 
     def _row_of(self, key: str) -> dict[str, str] | None:
-        """The row on screen under this key, or None. The key comes from the browser, so it
-        is looked up among the rows and never used to build anything."""
         return next((row for row in self.rows if row["key"] == key), None)
 
-    async def _change(self, operation: Callable[[MasterProfile], MasterProfile], *, at: str) -> bool:
-        """Applies an operation and saves it right away; False when it failed.
-
-        It starts from the profile on disk and not from the one loaded when the screen
-        opened: if you synced in another tab in the meantime, saving the old one would
-        erase that. `at` is where an error shows.
-        """
-        self._clear_error()
-        on_disk: MasterProfile | None = None
-        try:
-            on_disk = await asyncio.to_thread(load_profile, DATA_DIR)
-            if on_disk is None:
-                raise ValueError("There is no profile yet. Sync with LinkedIn first.")
-            updated = operation(on_disk)
-            await asyncio.to_thread(save_profile, DATA_DIR, updated)
-        except (ValueError, OSError) as error:
-            self.error = as_sentence(error)
-            # Nothing was saved, but the screen may be the stale one: after "That profession
-            # no longer exists" it would keep offering the row that fails. A profile that
-            # cannot be read leaves the list as it is.
-            if on_disk is not None:
-                self._show(on_disk)
-            # An error of a row that is gone shows above the list.
-            self.error_at = at if at == ADD_FORM or any(row["key"] == at for row in self.rows) else ""
-            return False
-        self._show(updated)
-        return True
+    def _error_place(self, at: str) -> str:
+        return at if at == ADD_FORM else super()._error_place(at)
 
     # --------------------------------------------------------------------- add
 
@@ -190,36 +119,11 @@ class ProfessionState(rx.State):
     # -------------------------------------------------------------------- edit
 
     async def _save(self, key: str, text: str) -> WriteEvents | None:
-        """The headline in the language on screen.
-
-        It arrives twice per edit, on Enter and when leaving the field: if the text did not
-        change, it does nothing.
-        """
         row = self._row_of(key)
         if row is None or text.strip() == row["own"]:
             return None
         profession_id, language = row["id"], self.language
         await self._change(lambda profile: operations.edit_profession(profile, profession_id, text, language), at=key)
-        return [ProfileState.refresh_counts]
-
-    @rx.event
-    async def save(self, key: str, text: str) -> WriteEvents | None:
-        """When leaving the field."""
-        return await self._save(key, text)
-
-    @rx.event
-    async def save_from_form(self, data: dict[str, Any]) -> WriteEvents | None:
-        """When pressing Enter."""
-        return await self._save(str(data.get("key", "")), str(data.get("text", "")))
-
-    @rx.event
-    async def confirm(self, key: str) -> WriteEvents | None:
-        """ "Still good" on a headline pending review, in either language."""
-        row = self._row_of(key)
-        if row is None or row["state"] != TextState.REVIEW:
-            return None
-        language = self.language
-        await self._change(lambda profile: confirm_version(profile, language, key), at=key)
         return [ProfileState.refresh_counts]
 
     @rx.event

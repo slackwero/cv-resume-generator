@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cv_generator.app.states import translation_state
+from cv_generator.app.states import text_list_state
 from cv_generator.app.states.profile_state import ProfileState
 from cv_generator.app.states.translation_state import TranslationState, text_rows
 from cv_generator.models.profile import Course, Language, MasterProfile, ProfileText
@@ -68,7 +68,7 @@ def test_rows_in_english_are_read_only(screen_data: Path) -> None:
     assert _row(tab, "education", TITLE_KEY)["context"] == "Universidad de Chile"
     assert _row(tab, "courses", COURSE_KEY)["context"] == "SANS · 2021"
 
-    run(TranslationState.save_text, tab, TITLE_KEY, "Licenciatura")
+    run(TranslationState.save, tab, TITLE_KEY, "Licenciatura")
     assert tab.error == "The English text comes from LinkedIn and is changed there."
     assert _stored(screen_data, TITLE_KEY) is None
 
@@ -77,7 +77,7 @@ def test_a_study_title_saved_in_spanish_is_its_translation(screen_data: Path) ->
     tab = _open(screen_data, language="es")
     assert _row(tab, "education", TITLE_KEY)["editable"] == "yes"
 
-    events = run(TranslationState.save_text, tab, TITLE_KEY, "Licenciatura en Ciencias de la Computación")
+    events = run(TranslationState.save, tab, TITLE_KEY, "Licenciatura en Ciencias de la Computación")
 
     assert events == [ProfileState.refresh_counts]
     assert _stored(screen_data, TITLE_KEY) == "Licenciatura en Ciencias de la Computación"
@@ -101,10 +101,10 @@ def test_the_same_blur_twice_writes_once(screen_data: Path, monkeypatch: pytest.
         saves.append(profile)
         save_profile(data_dir, profile)
 
-    monkeypatch.setattr(translation_state, "save_profile", spy)
+    monkeypatch.setattr(text_list_state, "save_profile", spy)
 
-    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
-    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
+    run(TranslationState.save, tab, COURSE_KEY, "Seguridad en la nube")
+    run(TranslationState.save, tab, COURSE_KEY, "Seguridad en la nube")
 
     assert len(saves) == 1
 
@@ -113,7 +113,7 @@ def test_same_text_copies_the_english(screen_data: Path) -> None:
     tab = _open(screen_data, language="es")
     assert _row(tab, "courses", COURSE_KEY)["copyable"] == "yes"
 
-    run(TranslationState.same_text, tab, COURSE_KEY)
+    run(TranslationState.same, tab, COURSE_KEY)
 
     assert _stored(screen_data, COURSE_KEY) == "Cloud Security"
     assert _row(tab, "courses", COURSE_KEY)["state"] == ""
@@ -137,13 +137,13 @@ def test_a_field_empty_in_english_offers_no_input(screen_data: Path) -> None:
     assert level["editable"] == ""
     assert _row(tab, "languages", LANGUAGE_KEY)["editable"] == "yes"
 
-    run(TranslationState.save_text, tab, LEVEL_KEY, "Nativo")
+    run(TranslationState.save, tab, LEVEL_KEY, "Nativo")
     assert _stored(screen_data, LEVEL_KEY) is None
 
 
 def test_an_unknown_key_is_ignored(screen_data: Path) -> None:
     tab = _open(screen_data, language="es")
-    assert run(TranslationState.save_text, tab, "nope.text", "x") is None
+    assert run(TranslationState.save, tab, "nope.text", "x") is None
     assert tab.error == ""
 
 
@@ -166,7 +166,7 @@ def _count_saves(monkeypatch: pytest.MonkeyPatch) -> list[MasterProfile]:
         saves.append(profile)
         save_profile(data_dir, profile)
 
-    monkeypatch.setattr(translation_state, "save_profile", spy)
+    monkeypatch.setattr(text_list_state, "save_profile", spy)
     return saves
 
 
@@ -198,8 +198,8 @@ def test_a_failed_save_shows_the_error_and_what_is_on_disk(screen_data: Path, mo
     def full(data_dir: Path, profile: MasterProfile) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(translation_state, "save_profile", full)
-    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad")
+    monkeypatch.setattr(text_list_state, "save_profile", full)
+    run(TranslationState.save, tab, COURSE_KEY, "Seguridad")
 
     assert tab.error == "Nothing was saved: the disk is full."
     assert tab.error_at == COURSE_KEY
@@ -216,7 +216,7 @@ def test_confirm_in_english_and_same_text_on_a_non_copyable_row_write_nothing(
     assert saves == []
 
     spanish = _open(screen_data, language="es")
-    run(TranslationState.same_text, spanish, LEVEL_KEY)
+    run(TranslationState.same, spanish, LEVEL_KEY)
     assert saves == []
 
 
@@ -224,7 +224,7 @@ def test_an_edit_against_an_unreadable_profile_keeps_the_rows(screen_data: Path)
     tab = _open(screen_data, language="es")
     (screen_data / "profile.json").write_text("{ not json", encoding="utf-8")
 
-    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
+    run(TranslationState.save, tab, COURSE_KEY, "Seguridad en la nube")
 
     assert [row["key"] for row in tab.rows["courses"]] == ["course-1.name"]
     assert tab.error != ""
@@ -241,8 +241,8 @@ def test_an_edit_of_a_row_deleted_in_another_tab_shows_the_error_above_the_list(
     def full(data_dir: Path, profile: MasterProfile) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(translation_state, "save_profile", full)
-    run(TranslationState.save_text, tab, COURSE_KEY, "Seguridad en la nube")
+    monkeypatch.setattr(text_list_state, "save_profile", full)
+    run(TranslationState.save, tab, COURSE_KEY, "Seguridad en la nube")
 
     assert tab.error == "Nothing was saved: the disk is full."
     # The row is gone from the refreshed list, so the error shows above it.

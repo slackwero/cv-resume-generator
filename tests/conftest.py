@@ -5,10 +5,9 @@ import pytest
 from cv_generator.app.states import (
     experience_state,
     home_state,
-    profession_state,
     profile_state,
     sync_state,
-    translation_state,
+    text_list_state,
     wizard_state,
 )
 
@@ -16,10 +15,9 @@ from cv_generator.app.states import (
 STATE_MODULES = (
     experience_state,
     home_state,
-    profession_state,
     profile_state,
     sync_state,
-    translation_state,
+    text_list_state,
     wizard_state,
 )
 

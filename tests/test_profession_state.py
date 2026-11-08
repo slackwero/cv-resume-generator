@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cv_generator.app.states import profession_state
+from cv_generator.app.states import text_list_state
 from cv_generator.app.states.profession_state import ProfessionState
 from cv_generator.app.states.profile_state import ProfileState
 from cv_generator.models.profile import MasterProfile, Profession, Translation
@@ -121,7 +121,7 @@ def test_adding_editing_and_moving_save_right_away(screen_data: Path) -> None:
 def test_an_unchanged_or_unknown_save_writes_nothing(screen_data: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tab = _open(screen_data)
     saves: list[int] = []
-    monkeypatch.setattr(profession_state, "save_profile", lambda *args: saves.append(1))
+    monkeypatch.setattr(text_list_state, "save_profile", lambda *args: saves.append(1))
 
     assert run(ProfessionState.save, tab, FIRST_KEY, " DevSecOps Engineer ") is None
     assert run(ProfessionState.save, tab, "nope.text", "x") is None
@@ -226,13 +226,28 @@ def test_deleting_asks_first_and_the_last_one_is_refused(screen_data: Path) -> N
     assert [p.id for p in _on_disk(screen_data).professions] == [FIRST]
 
 
+def test_switching_the_language_or_reopening_closes_the_delete_question(screen_data: Path) -> None:
+    tab = _open(screen_data)
+    run(ProfessionState.ask_delete, tab, SECOND_KEY)
+
+    run(ProfileState.switch_language, _screen(tab), "es")
+    run(ProfessionState.show_language, tab)
+
+    assert tab.confirming_key == ""
+
+    run(ProfessionState.ask_delete, tab, SECOND_KEY)
+    run(ProfessionState.start, tab)
+
+    assert tab.confirming_key == ""
+
+
 def test_a_failed_save_shows_the_error_and_what_is_on_disk(screen_data: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tab = _open(screen_data)
 
     def full(data_dir: Path, profile: MasterProfile) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(profession_state, "save_profile", full)
+    monkeypatch.setattr(text_list_state, "save_profile", full)
     run(ProfessionState.save, tab, FIRST_KEY, "Lead")
 
     assert tab.error == "Nothing was saved: the disk is full."
@@ -292,7 +307,7 @@ def test_a_failed_delete_keeps_the_rows_and_the_error_is_at_a_row_that_renders(
     def full(data_dir: Path, profile: MasterProfile) -> None:
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(profession_state, "save_profile", full)
+    monkeypatch.setattr(text_list_state, "save_profile", full)
     run(ProfessionState.confirm_delete, tab, SECOND_KEY)
 
     assert [row["key"] for row in tab.rows] == [FIRST_KEY, SECOND_KEY]
