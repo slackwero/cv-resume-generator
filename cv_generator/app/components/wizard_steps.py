@@ -959,6 +959,18 @@ def _profession_choice() -> rx.Component:
             ),
             style={"display": "block"},
         ),
+        # A clone whose headline was deleted says so here, where it is chosen. Always mounted:
+        # a `role="status"` that appears together with its text is not always announced.
+        note_text(
+            WizardState.profession_notice,
+            color=AMBER,
+            role="status",
+            style={
+                "display": "block",
+                "font_size": "0.8125rem",
+                "margin_top": rx.cond(WizardState.profession_notice == "", "0", "0.5rem"),
+            },
+        ),
         _profile_shortcut(
             "contact", WizardState.update_professions, label="Add or edit in My profile", margin_top="0.5rem"
         ),

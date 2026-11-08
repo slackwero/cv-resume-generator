@@ -174,7 +174,7 @@ def test_cloning_keeps_its_profession_by_id(screen_data: Path) -> None:
 
     assert state.profession_id == ARCHITECT_ID
     assert state.profession_in_language == "Lead Security Architect"
-    assert state.message == ""
+    assert (state.profession_notice, state.message) == ("", "")
 
 
 @pytest.mark.parametrize(
@@ -191,7 +191,7 @@ def test_cloning_an_old_recipe_matches_the_header_in_either_language(
     assert state.language == made_in
     assert state.profession_id == ARCHITECT_ID
     assert state.profession_in_language == shown
-    assert state.message == ""
+    assert (state.profession_notice, state.message) == ("", "")
     assert "Profession" not in state.pending_in_selection
 
 
@@ -199,7 +199,7 @@ def test_cloning_a_recipe_with_no_profession_takes_the_first_with_no_notice(scre
     state = _clone(screen_data, Selection())
 
     assert state.profession_id == FIRST_PROFESSION_ID
-    assert state.message == ""
+    assert (state.profession_notice, state.message) == ("", "")
 
 
 @pytest.mark.parametrize(
@@ -214,12 +214,37 @@ def test_cloning_after_the_profession_was_deleted_says_so(screen_data: Path, rec
 
     assert state.profession_id == FIRST_PROFESSION_ID
     assert state.profession_in_language == PROFESSION_ES
-    assert state.message == GONE
+    assert (state.profession_notice, state.message) == (GONE, "")
+
+    # It shows next to the dropdown, in step 2: leaving step 1 does not take it away.
+    run(WizardState.advance, state)
+
+    assert (state.step, state.profession_notice) == (2, GONE)
 
     # The notice is about the clone, not the language: a switch keeps it.
     run(WizardState.change_language, state, "en")
 
-    assert state.message == GONE
+    assert state.profession_notice == GONE
+
+
+def test_choosing_a_profession_answers_the_clone_notice(screen_data: Path) -> None:
+    state = _clone(screen_data, Selection(profession_id="p-gone"))
+
+    run(WizardState.choose_profession, state, ARCHITECT_ID)
+
+    assert state.profession_notice == ""
+
+
+def test_reopening_the_clone_works_the_notice_out_again(screen_data: Path) -> None:
+    # The session survives a reload: `start` must not keep the notice of the time before.
+    state = _clone(screen_data, Selection(profession_id="p-gone"))
+    profile = _on_disk(screen_data)
+    profile.professions.append(Profession(id="p-gone", text=CLOUD))
+    save_profile(screen_data, profile)
+
+    run(WizardState.start, state)
+
+    assert (state.profession_id, state.profession_notice) == ("p-gone", "")
 
 
 # ------------------------------------------------------------------ refreshing from disk
@@ -252,7 +277,7 @@ def test_refresh_list_keeps_the_choice_or_falls_back(screen_data: Path) -> None:
 
     assert [entry_id for entry_id, _, _ in _listed(state)] == [FIRST_PROFESSION_ID, cloud_id]
     assert state.profession_id == FIRST_PROFESSION_ID
-    assert state.message == ""
+    assert (state.profession_notice, state.message) == ("", "")
 
 
 def test_refresh_list_brings_the_first_profession_when_there_was_none(screen_data: Path) -> None:
@@ -306,6 +331,7 @@ def test_step_two_offers_the_list_and_the_way_to_my_profile() -> None:
     assert "Profession under your name" not in rendered
     assert "professions_list" in rendered
     assert "choose_profession" in rendered
+    assert "profession_notice" in rendered
     assert "Add or edit in My profile" in rendered
     assert "/profile?section=contact" in rendered
     assert "update_professions" in rendered

@@ -216,6 +216,10 @@ class WizardState(rx.State):
     # the entries with text in some language, in the CV's language, with their marks.
     profession_id: str = ""
     professions_list: list[dict[str, str]] = []
+    # What a clone says next to the dropdown when the headline its CV printed is no longer in
+    # the list. It stays until you choose one: the dropdown is in step 2, and the page's
+    # message is cleared on leaving step 1.
+    profession_notice: str = ""
 
     # What of the content is pending in the CV's language, rebuilt with the lists: selection
     # key -> "translation" or "review", and the line each one reads as. Plain vars and not
@@ -273,6 +277,7 @@ class WizardState(rx.State):
         self.generating = False
         self.message = ""
         self.action_error = ""
+        self.profession_notice = ""
         self.generated_cv = ""
         self.generated_cv_id = ""
         self.cloned_from = ""
@@ -661,7 +666,7 @@ class WizardState(rx.State):
 
         A recipe from before the list stored the headline as text, in the language that CV
         was made in, so it matches an entry in either language. A CV whose headline is no
-        longer in the list starts with the first one, and the message says so. A recipe that
+        longer in the list starts with the first one, and the dropdown says so. A recipe that
         stored neither starts with the first one too, with nothing to say.
         """
         listed = [entry["id"] for entry in self.professions_list]
@@ -677,7 +682,7 @@ class WizardState(rx.State):
                     return
         self.profession_id = listed[0] if listed else ""
         if recipe.profession_id or header:
-            self.message = PROFESSION_GONE
+            self.profession_notice = PROFESSION_GONE
 
     # ------------------------------------------------------------- navigation
 
@@ -892,6 +897,7 @@ class WizardState(rx.State):
         if not any(entry["id"] == profession_id for entry in self.professions_list):
             return
         self.profession_id = profession_id
+        self.profession_notice = ""
         self._invalidate_preview()
 
     @rx.var

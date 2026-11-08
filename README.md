@@ -205,8 +205,9 @@ deleted, because a CV needs a profession. The first one is the default for a new
 In step 2 of the wizard a **Profession** dropdown lists them in the CV's language, with
 **Add or edit in My profile** and **Refresh list** next to it; changing the CV's language
 keeps your choice. Cloning a CV keeps its profession; if you deleted it since, the clone
-starts with the first one and says so. A profile from before the list keeps its profession
-as the first entry, with its Spanish, and is backed up before the first save in the new format.
+starts with the first one and says so under the dropdown until you choose one. A profile from
+before the list keeps its profession as the first entry, with its Spanish, and is backed up
+before the first save in the new format.
 
 ## Matching against the posting
 

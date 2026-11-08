@@ -23,8 +23,8 @@ Use a machine, or a user account, that has never run the app.
   "A CV needs a profession: keep at least one." shows under the list. In the wizard, step 2,
   the Profession dropdown lists them in the CV's language and a new CV starts on the first; pick another, switch the CV
   language and the choice stays. Delete a profession a CV used, then clone that CV: the
-  clone starts with the first one and says "The profession this CV used is no longer in
-  your list, so it starts with the first one."
+  clone starts with the first one and, under the dropdown in step 2, says "The profession this
+  CV used is no longer in your list, so it starts with the first one." until you choose one.
 
 ## macOS
 
