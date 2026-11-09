@@ -4,6 +4,7 @@ It is the only place that knows the order of the steps, so neither the interface
 the command line has to repeat it.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -16,14 +17,30 @@ from cv_generator.storage.history import cvs_dir, register_cv, rename_entry
 from cv_generator.storage.repo import read_json, save_json
 from cv_generator.tailoring.resolver import resolve_content
 
+# What `GeneratedCV` gives every CV. The id arrives from the browser, and any page can send
+# one (`/new?from=` clones what it names): only an id of this form becomes a path.
+CV_ID = re.compile(r"cv-[0-9a-f]{12}")
+
 
 def _snapshot_path(data_dir: Path, cv_id: str) -> Path:
+    if not CV_ID.fullmatch(cv_id):
+        raise ValueError(f"not a CV id: {cv_id!r}")
     return cvs_dir(data_dir) / f"{cv_id}.json"
 
 
 def load_cv(data_dir: Path, cv_id: str) -> GeneratedCV:
-    """Loads the frozen snapshot of an already generated CV."""
-    return GeneratedCV.model_validate(read_json(_snapshot_path(data_dir, cv_id)))
+    """Loads the frozen snapshot of an already generated CV.
+
+    Raises:
+        ValueError: if the id is not a CV id, or the snapshot says it is another CV.
+        FileNotFoundError: if the CV has no snapshot.
+    """
+    cv = GeneratedCV.model_validate(read_json(_snapshot_path(data_dir, cv_id)))
+    # It is saved back under the id written inside it: a copy that keeps the original's id
+    # would overwrite the original when renamed.
+    if cv.cv_id != cv_id:
+        raise ValueError(f"the snapshot {cv_id} says it is another CV")
+    return cv
 
 
 def save_cv(data_dir: Path, cv: GeneratedCV) -> None:

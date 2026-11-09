@@ -1,3 +1,4 @@
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.i18n import default_sections
 from cv_generator.services import generation
 from cv_generator.services.achievements import add_achievement_in
-from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv
+from cv_generator.services.generation import generate_cv, load_cv, regenerate_pdf, rename_cv, save_cv
 from cv_generator.services.professions import add_profession
 from cv_generator.services.translations import save_translation, text_key
 from cv_generator.storage.history import (
@@ -442,7 +443,51 @@ def test_a_blank_name_is_refused_and_nothing_changes(
 
 def test_renaming_a_cv_with_no_snapshot_fails(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
-        rename_cv(tmp_path / "data", "cv-ghost", "Acme")
+        rename_cv(tmp_path / "data", "cv-0123456789ab", "Acme")
+
+
+@pytest.mark.parametrize("cv_id", ["../profile", "cvs/../../profile", "{data}/profile", "cv-ghost", ""])
+def test_an_id_that_is_not_a_cv_id_opens_no_file(tmp_path: Path, cv_id: str) -> None:
+    """The id comes from the browser, and any page can send one: `/new?from=` clones what it names.
+
+    Turned into a path as it came, "../profile" read data/profile.json, and the validation
+    error showed pieces of it on screen.
+    """
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "profile.json").write_text('{"personal": {"email": "maya@example.com"}}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a CV id") as error:
+        load_cv(data_dir, cv_id.format(data=data_dir))
+
+    assert "maya@example.com" not in str(error.value)
+
+
+def test_a_snapshot_is_never_written_outside_its_folder(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    """Renaming saves the snapshot under the id written inside it: a planted snapshot whose id
+    climbs out of data/cvs/ would write wherever it points."""
+    data_dir = tmp_path / "data"
+    cv = load_cv(data_dir, _generated(tmp_path, profile, selection))
+
+    with pytest.raises(ValueError, match="not a CV id"):
+        save_cv(data_dir, cv.model_copy(update={"cv_id": "../../planted"}))
+
+    assert not (tmp_path / "planted.json").exists()
+
+
+def test_a_snapshot_that_says_it_is_another_cv_is_refused(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    """A copied snapshot keeps the original's id inside: renaming the copy would overwrite the original."""
+    data_dir = tmp_path / "data"
+    cv_id = _generated(tmp_path, profile, selection)
+    copy = "cv-0123456789ab"
+    shutil.copy(data_dir / "cvs" / f"{cv_id}.json", data_dir / "cvs" / f"{copy}.json")
+
+    with pytest.raises(ValueError, match="another CV"):
+        load_cv(data_dir, copy)
 
 
 def _bilingual_selection(achievement_id: str = "ach-1") -> Selection:
