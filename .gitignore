@@ -22,7 +22,6 @@ __pycache__/
 .states
 .web
 assets/external/
-reflex.lock/
 reflex.log
 *.db
 
