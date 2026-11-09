@@ -4,7 +4,7 @@ import base64
 import io
 
 import pytest
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from PIL.PngImagePlugin import PngInfo
 
 from cv_generator.models.profile import MasterProfile
@@ -125,6 +125,15 @@ def test_rejects_what_is_not_an_image() -> None:
 def test_rejects_formats_other_than_jpg_and_png() -> None:
     with pytest.raises(ValueError, match="JPG or PNG"):
         process_photo(_image(600, 800, fmt="GIF", mode="P"))
+
+
+def test_no_other_format_reader_sees_the_bytes() -> None:
+    """Pillow reads dozens of formats, and its advisories land on the rare ones (XBM, TIFF,
+    FlashPix...). A photo that is not a JPG or PNG is turned away before any reader parses it."""
+    with pytest.raises(ValueError, match="JPG or PNG") as error:
+        process_photo(_image(600, 800, fmt="GIF", mode="P"))
+
+    assert isinstance(error.value.__cause__, UnidentifiedImageError)
 
 
 def test_rejects_a_too_large_file_without_opening_it() -> None:

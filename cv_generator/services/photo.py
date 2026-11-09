@@ -19,10 +19,11 @@ MAX_SIZE_BYTES = 10 * 1024 * 1024
 # memory. It is checked before loading the pixels, by reading only the header.
 MAX_PIXELS = 40_000_000
 
-# Pillow reports as MPO a JPEG that carries an MPF block with more images inside: that is
-# how iPhones and HDR Androids save photos (the gain map is the second image), and many
-# cameras too. To the user it is a JPG, and Pillow decodes the first one.
-ACCEPTED_FORMATS = ("JPEG", "MPO", "PNG")
+# The only Pillow readers that see the bytes: its advisories land on the rarer formats.
+# A JPEG that carries an MPF block with more images inside comes out of the JPEG reader as
+# MPO: that is how iPhones and HDR Androids save photos (the gain map is the second image),
+# and many cameras too. To the user it is a JPG, and Pillow decodes the first one.
+ACCEPTED_FORMATS = ("JPEG", "PNG")
 
 # 3:4 portrait. At 450 px wide, the photo printed at about 38 mm comes close to 300 dpi,
 # and the JPEG is around 40 KB: every history snapshot carries its own copy.
@@ -71,9 +72,7 @@ def process_photo(data: bytes) -> str:
         raise ValueError("The photo is larger than 10 MB. Upload a lighter version.")
 
     try:
-        with Image.open(io.BytesIO(data)) as image:
-            if image.format not in ACCEPTED_FORMATS:
-                raise ValueError("The photo has to be a JPG or PNG.")
+        with Image.open(io.BytesIO(data), formats=ACCEPTED_FORMATS) as image:
             if image.width * image.height > MAX_PIXELS:
                 raise ValueError("The photo has too many pixels. Upload a smaller version.")
 
