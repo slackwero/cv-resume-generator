@@ -5,11 +5,11 @@ description = "CV generator that tailors each résumé to the job application, w
 requires-python = ">=3.12"
 dependencies = [
     "jinja2>=3.1.6",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "pydantic>=2.13.4",
-    "pypdf>=6.16.2",
+    "pypdf>=6.21.4",
     "reflex>=0.9.8.post1",
-    "weasyprint>=69.0",
+    "weasyprint>=70.0",
 ]
 
 [build-system]
@@ -27,7 +27,7 @@ addopts = "-q --strict-markers"
 dev = [
     "httpx2>=2.16.0",
     "pdfminer-six>=20260107",
-    "pypdf>=6.16.2",
+    "pypdf>=6.21.4",
     "pytest>=9.1.1",
     "ruff>=0.16.5",
 ]
