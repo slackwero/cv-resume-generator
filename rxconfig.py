@@ -38,6 +38,9 @@ config = rx.Config(
     backend_host="127.0.0.1",
     # It is a personal tool, not a Reflex showcase.
     show_built_with_reflex=False,
+    # Reflex reports every run to PostHog by default: the system, the CPU, the memory, the
+    # versions. What runs on this computer stays on it.
+    telemetry_enabled=False,
     plugins=[
         RadixThemesPlugin(
             # The amber accent and zero radius align what is still Radix's (checkboxes,
