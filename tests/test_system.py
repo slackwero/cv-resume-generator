@@ -32,6 +32,17 @@ def test_rejects_a_missing_file(tmp_path: Path) -> None:
         open_with_viewer(allowed / "missing.pdf", allowed)
 
 
+@pytest.mark.parametrize("name", ["cv.command", "cv.app", "cv.pdf.sh", "cv"])
+def test_rejects_a_file_that_is_not_a_pdf(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The path arrives from the browser, and `open` runs a .command file in the Terminal."""
+    opened = tmp_path / name
+    opened.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(system.subprocess, "run", lambda *a, **k: pytest.fail("the viewer was started"))
+
+    with pytest.raises(ValueError, match="not a PDF"):
+        open_with_viewer(opened, tmp_path, platform="darwin")
+
+
 def _pdf(folder: Path) -> Path:
     pdf = folder / "cv.pdf"
     pdf.write_bytes(b"%PDF-")

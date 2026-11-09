@@ -17,20 +17,22 @@ class ViewerUnavailable(Exception):
 
 
 def open_with_viewer(path: Path, allowed_dir: Path, platform: str = sys.platform) -> None:
-    """Opens a file with the system viewer.
+    """Opens a PDF with the system viewer.
 
-    The path comes from the history, which is a hand-editable JSON file, so it is
-    required to point inside the output directory before handing it to the operating
-    system.
+    The path comes from the history, which is a hand-editable JSON file, and arrives from
+    the browser, so it is required to be a PDF inside the output directory before handing
+    it to the operating system: `open` runs a .command file in the Terminal.
 
     Raises:
-        ValueError: if the path points outside the allowed directory.
+        ValueError: if the path points outside the allowed directory or is not a PDF.
         FileNotFoundError: if the file does not exist.
         ViewerUnavailable: if the viewer could not be started; the OSError is its cause.
     """
     resolved = path.resolve()
     if not resolved.is_relative_to(allowed_dir.resolve()):
         raise ValueError(f"the path points outside the allowed directory: {resolved}")
+    if resolved.suffix.lower() != ".pdf":
+        raise ValueError(f"not a PDF: {resolved.name}")
     if not resolved.is_file():
         raise FileNotFoundError(f"the file no longer exists: {resolved}")
 

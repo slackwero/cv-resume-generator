@@ -378,7 +378,7 @@ class HomeState(rx.State):
             )
         except ValueError:
             self.message = (
-                "That CV's path points outside output/ and is not opened, for safety. "
+                "That CV's path is not a PDF inside output/, so it is not opened, for safety. "
                 "If you edited data/history.json by hand, check its pdf_file field."
             )
 

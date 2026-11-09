@@ -872,7 +872,7 @@ class WizardState(rx.State):
         except FileNotFoundError:
             self.action_error = "The PDF is no longer in output/. Generate it again."
         except ValueError:
-            self.action_error = "The PDF path points outside output/ and is not opened, for safety."
+            self.action_error = "That file is not a PDF inside output/, so it is not opened, for safety."
 
     @rx.event
     def clone_generated(self) -> rx.event.EventSpec:
