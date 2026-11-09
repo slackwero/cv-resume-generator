@@ -22,7 +22,7 @@ from cv_generator.rendering.styles import css_for_style
 from cv_generator.storage.repo import read_json
 
 if TYPE_CHECKING:
-    from weasyprint import HTML
+    from weasyprint import HTML, URLFetcher
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
@@ -33,6 +33,12 @@ TEMPLATES_DIR = PROJECT_ROOT / "templates"
 # stand-in Linux draws for the Mac fonts (2026-11-08). A filter searching for Terraform
 # would not find it. Without kerning the text reads whole, and the page barely changes.
 UNKERNED_CSS = "html { font-kerning: none; }"
+
+# Everything a CV draws travels inside it as a data: URI: the photo and the template's
+# ornaments. WeasyPrint's default fetcher reads any other URL from the disk or the network
+# while it renders, so if one ever reached the HTML, the PDF sent to a company would carry
+# that file. With no base URL, a relative one does not even resolve.
+FETCHED_PROTOCOLS = {"data"}
 
 
 class TemplateMeta(BaseModel):
@@ -145,14 +151,14 @@ def missing_libraries_advice(platform: str = sys.platform) -> str:
     )
 
 
-def _load_weasyprint() -> type["HTML"]:
+def _load_weasyprint() -> tuple[type["HTML"], type["URLFetcher"]]:
     """Imports WeasyPrint lazily, with a useful message if the native environment is missing."""
     prepare_native_libraries()
     try:
-        from weasyprint import HTML
+        from weasyprint import HTML, URLFetcher
     except (ImportError, OSError) as exc:
         raise RuntimeError(missing_libraries_advice()) from exc
-    return HTML
+    return HTML, URLFetcher
 
 
 def render_pdf_and_pages(
@@ -168,7 +174,9 @@ def render_pdf_and_pages(
         RuntimeError: if WeasyPrint cannot load its native libraries.
     """
     html = render_html(content, slug, today, language=language, style=style)
-    document = _load_weasyprint()(string=html, base_url=PROJECT_ROOT.as_uri()).render()
+    html_class, fetcher_class = _load_weasyprint()
+    fetcher = fetcher_class(allowed_protocols=FETCHED_PROTOCOLS)
+    document = html_class(string=html, url_fetcher=fetcher).render()
     return document.write_pdf(), len(document.pages)
 
 

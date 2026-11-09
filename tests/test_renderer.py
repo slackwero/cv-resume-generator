@@ -1,7 +1,10 @@
+import base64
 import io
 from datetime import date
+from pathlib import Path
 
 import pytest
+from PIL import Image
 from pypdf import PdfReader
 
 from cv_generator.models.cv import CVContent
@@ -9,7 +12,6 @@ from cv_generator.models.profile import Achievement, Experience, Skill
 from cv_generator.models.sections import Section, SectionKind
 from cv_generator.models.style import PaletteColor, Style
 from cv_generator.rendering.renderer import (
-    PROJECT_ROOT,
     available_templates,
     load_meta,
     missing_libraries_advice,
@@ -166,19 +168,23 @@ def test_missing_libraries_advice_names_the_fix_for_each_system(platform: str, e
         assert fragment in advice
 
 
-def test_passes_weasyprint_a_file_url_as_base(content: CVContent, monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, str] = {}
+def test_the_pdf_carries_nothing_but_data_uris(
+    content: CVContent, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Everything a CV draws travels inside it as a data: URI: the photo and the template's
+    ornaments. WeasyPrint's default fetcher read any other URL from the disk or the network
+    while rendering: if one ever reached the HTML, the PDF sent to a company would carry
+    that file."""
+    on_disk = tmp_path / "private.png"
+    Image.new("RGB", (8, 8), "red").save(on_disk)
+    inline = io.BytesIO()
+    Image.new("RGB", (8, 8), "blue").save(inline, format="PNG")
+    html = (
+        f'<img src="{on_disk.as_uri()}">'
+        f'<img src="data:image/png;base64,{base64.b64encode(inline.getvalue()).decode()}">'
+    )
+    monkeypatch.setattr("cv_generator.rendering.renderer.render_html", lambda *args, **kwargs: html)
 
-    class SpyHTML:
-        def __init__(self, *, string: str, base_url: str) -> None:
-            seen["base_url"] = base_url
+    pdf = PdfReader(io.BytesIO(render_pdf(content, "modern", language="es")))
 
-        def render(self) -> object:
-            raise StopIteration
-
-    monkeypatch.setattr("cv_generator.rendering.renderer._load_weasyprint", lambda: SpyHTML)
-
-    with pytest.raises(StopIteration):
-        render_pdf(content, "modern", language="es")
-
-    assert seen["base_url"] == PROJECT_ROOT.as_uri()
+    assert len(pdf.pages[0].images) == 1
