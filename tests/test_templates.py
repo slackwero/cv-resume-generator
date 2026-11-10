@@ -500,3 +500,16 @@ def test_technical_keeps_the_monospace_with_any_font(content: CVContent) -> None
 
     assert _family(html, "entry__dates") == "SFMono-Regular"
     assert _family(html, "section__title") == "SFMono-Regular"
+
+
+@pytest.mark.parametrize("language", ["en", "es"])
+@pytest.mark.parametrize("slug", TEMPLATES)
+def test_declares_the_language_it_is_written_in(slug: str, language: str, content: CVContent) -> None:
+    """Screen readers pick the voice, and PDF readers the dictionary, from `lang`.
+
+    Real case 2026-11-08: every CV declared "es", the English ones too, because the
+    template read it from `cv.language`, which `CVContent` does not have.
+    """
+    html = render_html(content, slug, language=language)
+
+    assert f'<html lang="{language}">' in html

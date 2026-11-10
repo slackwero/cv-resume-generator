@@ -5,7 +5,7 @@
   or sidebar, and the page is drawn in reading order (name, contact and the sections in
   the wizard order), because the PDF is written in the order the page is drawn.
 #}
-{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
+{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name, language) %}
   {{ m.header(cv, age, with_photo=false) }}
   <main class="body">{{ m.blocks(cv, present) }}</main>
 {% endcall %}

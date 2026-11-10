@@ -182,9 +182,9 @@
 {% endmacro %}
 
 
-{% macro document(cv, css, page_title) %}
+{% macro document(cv, css, page_title, language) %}
 <!doctype html>
-<html lang="{{ cv.language | default('es', true) }}">
+<html lang="{{ language }}">
 <head>
   <meta charset="utf-8">
   <title>{{ page_title }}</title>

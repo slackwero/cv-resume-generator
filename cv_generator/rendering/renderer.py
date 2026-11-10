@@ -131,6 +131,7 @@ def render_html(
         age=content.personal.compute_age(today or date.today()),
         present=translations.present,
         captions=translations.contact,
+        language=language,
     )
 
 

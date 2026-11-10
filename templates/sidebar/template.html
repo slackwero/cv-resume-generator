@@ -10,7 +10,7 @@
 #}
 {% set in_sidebar = ['skills', 'languages', 'hobbies'] %}
 {% set in_body = ['experience', 'education', 'courses', 'references'] %}
-{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name) %}
+{% call m.document(cv, css, "CV — " ~ cv.personal.first_name ~ " " ~ cv.personal.last_name, language) %}
   <div class="sheet">
     <div class="main">
       <div class="band">
