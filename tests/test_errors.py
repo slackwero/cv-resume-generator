@@ -10,7 +10,8 @@ import os
 
 import pytest
 
-from cv_generator.app.errors import as_sentence, pdf_not_written, readable
+from cv_generator.app.errors import as_sentence, pdf_not_written, profile_not_read, readable
+from cv_generator.services.profile import UnreadableProfileError
 
 
 def test_a_message_written_for_the_screen_goes_as_it_is() -> None:
@@ -65,3 +66,19 @@ def test_other_errors_writing_a_pdf_get_no_viewer_hint() -> None:
     error = OSError(errno.ENOSPC, "No space left on device", "/Users/someone/cv-generator/output/cv.pdf")
 
     assert pdf_not_written(error) == "the disk is full"
+
+
+def test_an_unreadable_profile_says_nothing_was_written_over_it_and_how_to_recover() -> None:
+    message = profile_not_read(UnreadableProfileError("profile.json is not valid JSON (line 1, column 3)"))
+
+    assert message.startswith("Your profile could not be read: profile.json is not valid JSON (line 1, column 3). ")
+    assert "Nothing was written over it" in message
+    assert "profile.<date>.json" in message
+
+
+def test_a_profile_the_system_would_not_open_gets_no_advice_about_editing_it() -> None:
+    error = PermissionError(errno.EACCES, "Permission denied", "/Users/someone/cv/data/profile.json")
+
+    message = profile_not_read(error)
+
+    assert message == "Your profile could not be read: this computer did not let the app use its data folder."

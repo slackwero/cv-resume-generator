@@ -9,8 +9,9 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
-from cv_generator.app.errors import pdf_not_written, readable, viewer_not_opened
+from cv_generator.app.errors import pdf_not_written, profile_not_read, readable, viewer_not_opened
 from cv_generator.app.focus import focus_on
+from cv_generator.models.profile import MasterProfile
 from cv_generator.rendering.i18n import available_languages, load_language
 from cv_generator.services.generation import rename_cv, rewrite_pdf
 from cv_generator.services.preferences import load_content_language, save_content_language, starting_language
@@ -81,16 +82,23 @@ class HomeState(rx.State):
         """Reads profile, sync status and history from disk."""
         self.message = ""
         # Read on every open: a tab already open never changes behind the owner's back.
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         source = profile.source_language if profile is not None else None
         self.language = starting_language(load_content_language(DATA_DIR), source)
-        self._load_profile()
-        self._load_pending()
+        self._load_profile(profile)
+        self._load_pending(profile)
         self._load_sync()
         self._load_history()
 
-    def _load_profile(self) -> None:
-        profile = load_profile(DATA_DIR)
+    def _profile_on_disk(self) -> MasterProfile | None:
+        """The profile, or None when there is none or it cannot be read, which the message says."""
+        try:
+            return load_profile(DATA_DIR)
+        except (ValueError, OSError) as error:
+            self.message = profile_not_read(error)
+            return None
+
+    def _load_profile(self, profile: MasterProfile | None) -> None:
         self.has_profile = profile is not None
         self.notices = []
 
@@ -128,8 +136,7 @@ class HomeState(rx.State):
                 "Until you complete it in My profile, the CV will print 'PENDING' in its place."
             )
 
-    def _load_pending(self) -> None:
-        profile = load_profile(DATA_DIR)
+    def _load_pending(self, profile: MasterProfile | None) -> None:
         if profile is None:
             self.pending_summary = ""
             return
@@ -151,7 +158,7 @@ class HomeState(rx.State):
             save_content_language(DATA_DIR, code)
         except OSError as error:
             self.message = f"The language could not be remembered: {readable(error)}"
-        self._load_pending()
+        self._load_pending(self._profile_on_disk())
 
     def _load_sync(self) -> None:
         status = load_sync_status(DATA_DIR)

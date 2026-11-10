@@ -2,10 +2,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from cv_generator.models.profile import Achievement, Experience, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.profile import (
     PENDING_FIELD,
     SyncStatus,
+    UnreadableProfileError,
     available_backups,
     load_profile,
     load_sync_status,
@@ -253,3 +256,36 @@ def test_a_pre_list_profile_with_only_a_spanish_profession_is_not_missing_it(tmp
     assert p is not None
     assert p.personal.profession == "Ingeniero DevSecOps"
     assert "profession" not in pending_fields(p)
+
+
+def test_a_profile_file_that_is_not_json_says_where_it_breaks(tmp_path: Path) -> None:
+    (tmp_path / "profile.json").write_text('{"personal": {', encoding="utf-8")
+
+    with pytest.raises(UnreadableProfileError, match=r"^profile\.json is not valid JSON \(line 1, column 15\)$"):
+        load_profile(tmp_path)
+
+
+def test_a_profile_file_that_is_not_text_says_so(tmp_path: Path) -> None:
+    (tmp_path / "profile.json").write_bytes(b"\xff\xfe\x00{")
+
+    with pytest.raises(UnreadableProfileError, match=r"^profile\.json is not UTF-8 text$"):
+        load_profile(tmp_path)
+
+
+def test_json_without_the_shape_of_a_profile_names_the_first_field_that_fails(tmp_path: Path) -> None:
+    """Pydantic's own text is a dozen lines with links; the screen needs where to look."""
+    save_profile(tmp_path, _profile_with_photo_and_achievements())
+    data = json.loads((tmp_path / "profile.json").read_text(encoding="utf-8"))
+    data["experiences"][0]["company"] = 5
+    (tmp_path / "profile.json").write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(UnreadableProfileError) as raised:
+        load_profile(tmp_path)
+
+    assert str(raised.value).startswith("profile.json does not have the shape of a profile: experiences.0.company ")
+    assert "\n" not in str(raised.value)
+
+
+def test_an_unreadable_profile_is_still_a_value_error() -> None:
+    """Every write already catches ValueError and refuses to save over the file."""
+    assert issubclass(UnreadableProfileError, ValueError)

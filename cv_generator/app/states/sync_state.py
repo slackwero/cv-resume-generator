@@ -9,7 +9,7 @@ from pathlib import Path
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, MAX_UPLOAD_BYTES, MEGABYTE
-from cv_generator.app.errors import readable
+from cv_generator.app.errors import profile_not_read, readable
 from cv_generator.importers.base import PartialPersonalInfo
 from cv_generator.importers.merge import Change, ChangeKind
 from cv_generator.models.profile import MasterProfile
@@ -145,7 +145,17 @@ class SyncState(rx.State):
         self._changes = []
         self._applied = None
 
-        self._compare_against(load_profile(DATA_DIR))
+        try:
+            profile = load_profile(DATA_DIR)
+        except (ValueError, OSError) as error:
+            # Not a missing profile: the notice for a first sync would offer to create one
+            # over the file. `_analyze` reads it again and refuses until it is fixed.
+            self.error_message = profile_not_read(error)
+            self._profile = None
+            self.is_first_profile = False
+            self.notice = ""
+            return
+        self._compare_against(profile)
 
     def _compare_against(self, profile: MasterProfile | None) -> None:
         """Takes the profile the next file is analyzed against."""

@@ -16,7 +16,7 @@ from cv_generator.app.config import (
     DEFAULT_TEMPLATE,
     OUTPUT_DIR,
 )
-from cv_generator.app.errors import readable, viewer_not_opened
+from cv_generator.app.errors import profile_not_read, readable, viewer_not_opened
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
@@ -160,6 +160,14 @@ def style_from_vars(*, style_color: str, style_font: str, style_size: str, style
         size=FontSize(style_size) if style_size else None,
         line_height=style_line_height or None,
     )
+
+
+def _profile_on_disk() -> tuple[MasterProfile | None, str]:
+    """The profile on disk, or why it could not be read, for the notice of whoever asked."""
+    try:
+        return load_profile(DATA_DIR), ""
+    except (ValueError, OSError) as error:
+        return None, profile_not_read(error)
 
 
 def _forget_old_previews() -> None:
@@ -314,7 +322,10 @@ class WizardState(rx.State):
         self.large_view = ""
         _forget_old_previews()
 
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.message = unreadable
+            return
         if profile is None:
             self.message = (
                 "There is no profile to start from yet. Import your LinkedIn export "
@@ -1107,7 +1118,10 @@ class WizardState(rx.State):
         like `update_skills` only refreshes the skills; nothing else is touched.
         """
         self.photo_notice = ""
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.photo_notice = unreadable
+            return
         if profile is None or self._profile is None:
             return
 
@@ -1137,7 +1151,10 @@ class WizardState(rx.State):
         missing here. The chosen one stays while it is still in the list.
         """
         self.contact_notice = ""
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.contact_notice = unreadable
+            return
         if profile is None or self._profile is None:
             return
 
@@ -1311,7 +1328,10 @@ class WizardState(rx.State):
         everything else you chose is untouched. Only the skills are refreshed from the
         profile: the achievements have their own button, `update_achievements`.
         """
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.message = unreadable
+            return
         if profile is None or self._profile is None:
             return
 
@@ -1331,7 +1351,10 @@ class WizardState(rx.State):
         its original, a removed one leaves the selection and hands its check to the copies
         of it you kept, and every other check stays as you left it.
         """
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.message = unreadable
+            return
         if profile is None or self._profile is None:
             return
 
@@ -1348,7 +1371,10 @@ class WizardState(rx.State):
         Like `update_skills`, for the profession dropdown. The chosen one stays while it is
         still in the list; once it is gone the CV takes the first one.
         """
-        profile = load_profile(DATA_DIR)
+        profile, unreadable = _profile_on_disk()
+        if unreadable:
+            self.message = unreadable
+            return
         if profile is None or self._profile is None:
             return
 

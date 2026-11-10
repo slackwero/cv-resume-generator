@@ -761,7 +761,14 @@ def profile_page() -> rx.Component:
         "in English and in Spanish. The jobs themselves come in and are updated from the LinkedIn sync.",
         # Above the subsections, so it is seen from whichever one is open.
         _error_notice(ProfileState.language_error, margin_top="0"),
-        rx.cond(ProfileState.has_profile, _form(), _without_profile()),
+        _error_notice(ProfileState.profile_error, margin_top="0"),
+        # A file that cannot be read is not a missing one: the notice says what to fix, and
+        # inviting a first import would offer to create a profile that is already there.
+        rx.cond(
+            ProfileState.has_profile,
+            _form(),
+            rx.cond(ProfileState.profile_error == "", _without_profile(), rx.fragment()),
+        ),
         strip=rx.cond(ProfileState.has_profile, legend_strip(_strip()), rx.fragment()),
         # One click: My profile switches and remembers the language, then the Work
         # experience and the translated texts follow it. Wired here and not in `switch_language`: ExperienceState

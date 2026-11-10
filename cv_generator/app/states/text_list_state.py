@@ -12,7 +12,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
-from cv_generator.app.errors import as_sentence, readable
+from cv_generator.app.errors import as_sentence, profile_not_read
 from cv_generator.app.states.profile_state import ProfileState
 from cv_generator.models.profile import MasterProfile
 from cv_generator.services.profile import load_profile, save_profile
@@ -88,7 +88,7 @@ class TextListMixin(rx.State, mixin=True):
         try:
             profile = await asyncio.to_thread(load_profile, DATA_DIR)
         except (ValueError, OSError) as error:
-            self.error = f"Your profile could not be read: {readable(error)}"
+            self.error = profile_not_read(error)
             profile = None
         self._show(profile)
 

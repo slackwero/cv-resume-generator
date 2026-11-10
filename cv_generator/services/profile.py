@@ -3,10 +3,11 @@
 It isolates the interface from the details of where and how the files are stored.
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.placeholders import PENDING_FIELD  # noqa: F401  (re-exported: callers import it from here)
@@ -103,17 +104,46 @@ def _upgraded(data_dir: Path, profile: MasterProfile) -> MasterProfile:
     return profile
 
 
+class UnreadableProfileError(ValueError):
+    """profile.json is there but is not a profile: not text, not JSON, or not its shape.
+
+    A ValueError, so every write that starts from the file on disk refuses to save over it.
+    """
+
+
+def _first_problem(error: ValidationError) -> str:
+    """Where pydantic's report starts, on one line: its own text is a dozen lines with links."""
+    problems = error.errors()
+    first = problems[0]
+    where = ".".join(str(part) for part in first["loc"]) or "the whole file"
+    more = f", and {len(problems) - 1} more" if len(problems) > 1 else ""
+    return f"{where} ({first['msg'].lower()}){more}"
+
+
 def load_profile(data_dir: Path) -> MasterProfile | None:
     """Returns the master profile, or None if none was created yet.
 
     A profile saved before the bilingual content comes back upgraded in memory: the file
-    is only rewritten by the next save.
+    is only rewritten by the next save. A file that is not a profile raises
+    `UnreadableProfileError`, saying where it breaks.
     """
     path = data_dir / PROFILE_FILE
     if not path.is_file():
         return None
 
-    return _upgraded(data_dir, MasterProfile.model_validate(read_json(path)))
+    try:
+        profile = MasterProfile.model_validate(read_json(path))
+    except UnicodeDecodeError as error:
+        raise UnreadableProfileError(f"{PROFILE_FILE} is not UTF-8 text") from error
+    except json.JSONDecodeError as error:
+        raise UnreadableProfileError(
+            f"{PROFILE_FILE} is not valid JSON (line {error.lineno}, column {error.colno})"
+        ) from error
+    except ValidationError as error:
+        raise UnreadableProfileError(
+            f"{PROFILE_FILE} does not have the shape of a profile: {_first_problem(error)}"
+        ) from error
+    return _upgraded(data_dir, profile)
 
 
 def save_profile(data_dir: Path, profile: MasterProfile) -> None:

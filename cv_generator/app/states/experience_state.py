@@ -14,7 +14,7 @@ from typing import Any, TypedDict
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
-from cv_generator.app.errors import as_sentence
+from cv_generator.app.errors import as_sentence, profile_not_read
 from cv_generator.app.focus import focus_on
 from cv_generator.app.states.profile_state import ProfileState, text_version
 from cv_generator.models.profile import Experience, MasterProfile
@@ -242,7 +242,7 @@ class ExperienceState(rx.State):
         self._clear_error()
         self._move_to(await self._screen_language())
 
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         self.has_profile = profile is not None
         if profile is None:
             self.rows = []
@@ -266,9 +266,17 @@ class ExperienceState(rx.State):
         self._close_forms()
         self._clear_error()
         self._move_to(language)
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         if profile is not None:
             self._show(profile)
+
+    def _profile_on_disk(self) -> MasterProfile | None:
+        """The profile, or None when there is none or it cannot be read, which the error says."""
+        try:
+            return load_profile(DATA_DIR)
+        except (ValueError, OSError) as error:
+            self.error = profile_not_read(error)
+            return None
 
     async def _screen_language(self) -> str:
         return (await self.get_state(ProfileState)).language

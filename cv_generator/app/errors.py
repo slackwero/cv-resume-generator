@@ -9,6 +9,8 @@ can act on.
 import errno
 from pathlib import Path
 
+from cv_generator.services.profile import UnreadableProfileError
+
 _PERMISSION = {errno.EACCES, errno.EPERM}
 
 
@@ -42,6 +44,21 @@ def as_sentence(error: BaseException) -> str:
     if isinstance(error, OSError) and error.errno is not None:
         return f"Nothing was saved: {readable(error)}."
     return str(error)
+
+
+def profile_not_read(error: BaseException) -> str:
+    """Why a screen opened without the profile, for its notice.
+
+    A file that is there but is not a profile is the owner's to fix, and the way out is
+    said: nothing wrote over it, and every sync applied over it left a dated copy next to it.
+    """
+    message = f"Your profile could not be read: {readable(error)}."
+    if isinstance(error, UnreadableProfileError):
+        message += (
+            " Nothing was written over it. Fix data/profile.json, or replace it with one of the copies "
+            "next to it (profile.<date>.json), and open this page again."
+        )
+    return message
 
 
 def pdf_not_written(error: OSError) -> str:

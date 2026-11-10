@@ -20,7 +20,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR
-from cv_generator.app.errors import as_sentence, readable
+from cv_generator.app.errors import as_sentence, profile_not_read, readable
 from cv_generator.models.profile import MasterProfile, PersonalInfo
 from cv_generator.rendering.i18n import available_languages, language_name
 from cv_generator.services import skills as skill_operations
@@ -159,6 +159,8 @@ class ProfileState(rx.State):
     source_language: str = ""
     # Why the switch could not be remembered. It is shown above every subsection.
     language_error: str = ""
+    # Why the profile on disk could not be read. It is shown in place of the subsections.
+    profile_error: str = ""
     # Set while the last switch could not be remembered: the file still holds the
     # language before it, so `start` must not read it back.
     _switch_not_remembered: bool = False
@@ -202,7 +204,7 @@ class ProfileState(rx.State):
         self.error_message = ""
         self.saved = False
 
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         self.has_profile = profile is not None
         # Read on every open, like Home: the remembered language is the one a page opens in.
         # Not after a switch that could not be remembered: every click in the menu runs
@@ -218,6 +220,16 @@ class ProfileState(rx.State):
         self.uploading_photo = False
         self.photo_error = ""
         self.skills_error = ""
+
+    def _profile_on_disk(self) -> MasterProfile | None:
+        """The profile, or None when there is none or it cannot be read, which `profile_error` says."""
+        try:
+            profile = load_profile(DATA_DIR)
+        except (ValueError, OSError) as error:
+            self.profile_error = profile_not_read(error)
+            return None
+        self.profile_error = ""
+        return profile
 
     def _typed(self) -> dict[str, str]:
         return {field: getattr(self, field) for field in EDITABLE_FIELDS}
@@ -255,7 +267,7 @@ class ProfileState(rx.State):
 
         The other states of My profile save on their own and return this after each write.
         """
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         if profile is not None:
             self._count(profile)
 
@@ -277,7 +289,7 @@ class ProfileState(rx.State):
         except OSError as error:
             self.language_error = f"The language could not be remembered: {readable(error)}"
             self._switch_not_remembered = True
-        profile = load_profile(DATA_DIR)
+        profile = self._profile_on_disk()
         if profile is not None:
             self._read(profile)
 
