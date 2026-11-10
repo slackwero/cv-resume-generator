@@ -28,6 +28,11 @@ app = rx.App(
     # geometry of the link rail.
     stylesheets=["/style.css"],
     head_components=[
+        # In development Vite serves this page outside the backend, with no header to refuse
+        # a frame: another page could frame the app and trick clicks. Framed, it shows
+        # nothing. In production the backend's `frame-ancestors` refuses it already
+        # (local_only.py).
+        rx.script("if (window.top !== window.self) document.documentElement.style.display = 'none';"),
         # Declaring the icon is also what stops the browser from requesting /favicon.ico and
         # getting a 404 on every load: it was the application's only console error.
         rx.el.link(rel="icon", type="image/svg+xml", href="/favicon.svg"),

@@ -27,10 +27,12 @@ credentials), which answers preflights before this middleware sees them. The rea
 request that follows still reaches this middleware and gets a 403, so the app's handler
 never runs.
 
-Known limit: in development mode the frontend is served by Vite on port 3000, outside
-this middleware, so another website can frame the live app in an iframe (clickjacking:
-it cannot read anything, only trick clicks). In the prod single-port mode the frontend
-is served through this middleware, so cross-site iframes are refused.
+Framing. Every response says, in `Content-Security-Policy: frame-ancestors`, that only
+the app's own pages may frame it: the wizard frames the PDF preview, on the backend's
+port in development. Any other page, another localhost port included, could frame the
+app and trick clicks (clickjacking: it reads nothing, but a click deletes a CV). In
+development the page itself comes from Vite on port 3000, outside this middleware: the
+page hides itself when it is framed (the head script in app.py).
 
 The ports are read at request time, not at import: `reflex run` exports the real
 frontend and backend ports to the backend process as environment variables only when it
@@ -45,7 +47,7 @@ from urllib.parse import urlsplit
 
 from reflex.config import get_config
 from starlette.responses import PlainTextResponse
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 LOCAL_HOSTNAMES = frozenset({"localhost", "127.0.0.1"})
 
@@ -102,6 +104,12 @@ def is_top_level_navigation(method: str | None, fetch_mode: str | None, fetch_de
     )
 
 
+def frame_ancestors(ports: Collection[int]) -> str:
+    """The CSP that lets only the app's own pages frame a response."""
+    pages = [f"http://{host}:{port}" for host in sorted(LOCAL_HOSTNAMES) for port in sorted(ports)]
+    return " ".join(["frame-ancestors", "'self'", *pages])
+
+
 def configured_ports() -> frozenset[int]:
     """The frontend and backend ports of the running app."""
     config = get_config()
@@ -116,6 +124,8 @@ class LocalOnlyMiddleware:
         self._ports = ports
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            send = self._unframeable(send)
         # Lifespan has no headers and nothing to protect: it goes straight through.
         if scope["type"] not in ("http", "websocket") or self._is_allowed(scope):
             await self._app(scope, receive, send)
@@ -124,6 +134,18 @@ class LocalOnlyMiddleware:
         else:
             # Closing before accepting makes the server answer the handshake with 403.
             await send({"type": "websocket.close", "code": WEBSOCKET_POLICY_VIOLATION})
+
+    def _unframeable(self, send: Send) -> Send:
+        """`send`, adding to the response the policy that only the app's pages may frame it."""
+        policy = (b"content-security-policy", frame_ancestors(self._ports()).encode("latin-1"))
+
+        async def with_policy(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = [header for header in message.get("headers", []) if header[0] != policy[0]]
+                message = {**message, "headers": [*headers, policy]}
+            await send(message)
+
+        return with_policy
 
     def _is_allowed(self, scope: Scope) -> bool:
         headers = {name.decode("latin-1"): value.decode("latin-1") for name, value in scope["headers"]}

@@ -39,3 +39,13 @@ def test_the_app_registers_the_four_routes() -> None:
     missing = {path.lstrip("/") or "index" for path in PAGES} - registered
 
     assert not missing, f"unregistered routes: {missing}"
+
+
+def test_the_app_hides_itself_inside_another_page() -> None:
+    """In development Vite serves the page outside the backend, with no header to refuse a
+    frame: the page refuses to show itself framed."""
+    from cv_generator.app.app import app
+
+    scripts = " ".join(str(component) for component in app.head_components)
+
+    assert "window.top !== window.self" in scripts

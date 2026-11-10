@@ -125,6 +125,24 @@ def test_a_malformed_origin_is_refused_not_crashed(client: TestClient) -> None:
     assert client.get("/", headers={"origin": "http://localhost:3000.evil.example"}).status_code == 403
 
 
+def test_only_the_app_own_pages_may_frame_a_response(client: TestClient) -> None:
+    """Another page, another localhost port included, could frame the app and trick clicks.
+    The wizard frames the PDF preview from its own page, on the other port in development."""
+    policy = client.get("/").headers["content-security-policy"]
+
+    sources = policy.removeprefix("frame-ancestors ").split()
+    assert policy.startswith("frame-ancestors ")
+    assert sorted(sources) == sorted(
+        ["'self'"] + [f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (3000, 8000)]
+    )
+
+
+def test_a_refusal_cannot_be_framed_either(client: TestClient) -> None:
+    response = client.get("/", headers={"origin": "http://evil.example"})
+
+    assert response.headers["content-security-policy"].startswith("frame-ancestors ")
+
+
 # TestClient ignores its base_url for websockets and sends `Host: testserver`, so the
 # websocket tests set the host the browser would send.
 APP_WEBSOCKET_HEADERS = {"host": "localhost:8000", "origin": "http://localhost:3000"}

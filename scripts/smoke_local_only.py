@@ -7,8 +7,8 @@ server (granian, bound by `rxconfig.py`) behaves the same way. Start the app fir
     uv run python scripts/smoke_local_only.py [--frontend-port 3000] [--backend-port 8000]
 
 The checks: the app answers, a foreign Host is refused, a foreign Origin is refused, a
-foreign websocket handshake is refused, and neither the backend nor the frontend (Vite, in
-development) is reachable from the network.
+foreign websocket handshake is refused, only the app's own pages may frame a response, and
+neither the backend nor the frontend (Vite, in development) is reachable from the network.
 
 It prints one line per check (`PASS`, `FAIL` or `SKIP`) and exits 0 only when no check
 failed. CI runs it after starting the app, so the first start (which installs the
@@ -62,6 +62,21 @@ def expect_status(name: str, ping_url: str, headers: dict[str, str], expected: i
         print(f"PASS {name}")
         return True
     print(f"FAIL {name}: expected {expected}, got {actual}")
+    return False
+
+
+def check_frame_policy(ping_url: str) -> bool:
+    """Every response says that only the app's own pages may frame it."""
+    name = "framing refused to other pages"
+    try:
+        policy = httpx.get(ping_url, timeout=REQUEST_TIMEOUT_SECONDS).headers.get("content-security-policy", "")
+    except httpx.HTTPError as error:
+        print(f"FAIL {name}: {type(error).__name__}: {error}")
+        return False
+    if policy.startswith("frame-ancestors 'self' "):
+        print(f"PASS {name}")
+        return True
+    print(f"FAIL {name}: the policy is {policy!r}")
     return False
 
 
@@ -143,6 +158,7 @@ def main() -> int:
         expect_status("foreign host refused", ping_url, {"Host": "evil.example"}, 403),
         expect_status("foreign origin refused", ping_url, {"Origin": "http://evil.example"}, 403),
         check_foreign_websocket_refused(args.backend_port),
+        check_frame_policy(ping_url),
         *(check_not_reachable_from_network(port) for port in sorted({args.frontend_port, args.backend_port})),
     ]
     return 0 if all(results) else 1
