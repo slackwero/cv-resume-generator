@@ -49,10 +49,13 @@ ul { list-style: none; margin: 0; padding: 0; }
 .section { margin-bottom: 6.5mm; }
 /* The spacing in em, so it keeps its proportion at any CV size. At 1.5pt pdfminer, the base
    of many resume parsers, read the titles letter by letter ("W O R K   E X P E R I E N C E");
-   at 1pt it still split them with one of the fonts (measured 2026-11-07). */
+   at 1pt it still split them with one of the fonts (measured 2026-11-07).
+   The titles start at the same edge as their content, and so do the lists below them.
+   Real case, measured with tests/test_ats.py: centered, pdfminer read "Professional
+   Profile" and "Education" after the content they name. */
 .section__title { font-family: var(--heading-font); font-size: calc(11pt * var(--scale));
                    font-weight: 400; text-transform: uppercase;
-                   letter-spacing: 0.06em; text-align: center; color: var(--accent);
+                   letter-spacing: 0.06em; color: var(--accent);
                    margin: 0 0 3.5mm; }
 
 .profile { margin: 0; text-align: justify; font-size: calc(10.5pt * var(--scale)); }
@@ -71,14 +74,12 @@ ul { list-style: none; margin: 0; padding: 0; }
 .achievements li { margin-bottom: 1.3mm; position: relative; }
 .achievements li::before { content: "—"; position: absolute; left: -6mm; color: var(--accent); }
 
-.chips { text-align: center; }
 .chips li { display: inline; font-size: calc(10pt * var(--scale)); }
 .chips li:not(:last-child)::after { content: "  ·  "; color: var(--accent); }
 .chips__level { font-style: italic; color: #6b6b6b; }
 .chips__level::before { content: " ("; }
 .chips__level::after { content: ")"; }
 
-.list { text-align: center; }
 .list li { margin-bottom: 1.5mm; }
 .list__main { font-weight: 700; }
 .list__secondary, .list__meta { color: #6b6b6b; font-style: italic; }
