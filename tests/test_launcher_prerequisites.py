@@ -1,5 +1,6 @@
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TextIO
+from urllib.parse import urlparse
 
 import pytest
 
@@ -247,7 +248,10 @@ def test_windows_without_winget_explains_how_to_get_msys2(monkeypatch: pytest.Mo
     monkeypatch.setattr(prerequisites.shutil, "which", lambda name: None)
     msys2 = named("win32", "MSYS2")
     assert msys2.install is None
-    assert "msys2.org" in msys2.manual_help
+    # The host is compared whole: "msys2.org" in the text would also pass for
+    # https://msys2.org.example.net.
+    links = [urlparse(word) for word in msys2.manual_help.split() if "://" in word]
+    assert [(link.scheme, link.hostname) for link in links] == [("https", "www.msys2.org")]
 
 
 def test_windows_gets_pango_from_msys2(recorder: Recorder, log: TextIO) -> None:
