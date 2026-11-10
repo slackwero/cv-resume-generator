@@ -102,9 +102,9 @@ PDFs in `output/`, both excluded from git.
 > to a public server.
 >
 > On your computer it protects itself: it only answers this computer (`localhost`), and it
-> refuses requests from other websites open in your browser. In development mode
-> (`uv run reflex run`), other computers on your network can still load the interface's
-> code from port 3000, but not your data.
+> refuses requests from other websites open in your browser. That includes development
+> mode (`uv run reflex run`): the interface's development server on port 3000 also listens
+> only on this computer.
 >
 > Started with `start.command`, `start.sh` or `start.bat`, the app runs in production mode on one
 > port, behind that same protection: nothing in it, interface included, is reachable

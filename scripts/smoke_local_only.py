@@ -7,7 +7,8 @@ server (granian, bound by `rxconfig.py`) behaves the same way. Start the app fir
     uv run python scripts/smoke_local_only.py [--frontend-port 3000] [--backend-port 8000]
 
 The checks: the app answers, a foreign Host is refused, a foreign Origin is refused, a
-foreign websocket handshake is refused, and the backend is not reachable from the network.
+foreign websocket handshake is refused, and neither the backend nor the frontend (Vite, in
+development) is reachable from the network.
 
 It prints one line per check (`PASS`, `FAIL` or `SKIP`) and exits 0 only when no check
 failed. CI runs it after starting the app, so the first start (which installs the
@@ -74,19 +75,19 @@ def outbound_ipv4() -> str | None:
             return None
 
 
-def check_not_reachable_from_network(backend_port: int) -> bool:
-    """The backend must refuse (or ignore) connections that arrive on the network address."""
-    name = "not reachable from the network"
+def check_not_reachable_from_network(port: int) -> bool:
+    """The port must refuse (or ignore) connections that arrive on the network address."""
+    name = f"port {port} not reachable from the network"
     address = outbound_ipv4()
     if address is None or ipaddress.ip_address(address).is_loopback:
         print(f"SKIP {name}: this machine has no non-loopback IPv4 address")
         return True
     try:
-        socket.create_connection((address, backend_port), timeout=CONNECT_TIMEOUT_SECONDS).close()
+        socket.create_connection((address, port), timeout=CONNECT_TIMEOUT_SECONDS).close()
     except OSError:
         print(f"PASS {name}")
         return True
-    print(f"FAIL {name}: {address}:{backend_port} accepted a connection")
+    print(f"FAIL {name}: {address}:{port} accepted a connection")
     return False
 
 
@@ -142,7 +143,7 @@ def main() -> int:
         expect_status("foreign host refused", ping_url, {"Host": "evil.example"}, 403),
         expect_status("foreign origin refused", ping_url, {"Origin": "http://evil.example"}, 403),
         check_foreign_websocket_refused(args.backend_port),
-        check_not_reachable_from_network(args.backend_port),
+        *(check_not_reachable_from_network(port) for port in sorted({args.frontend_port, args.backend_port})),
     ]
     return 0 if all(results) else 1
 
