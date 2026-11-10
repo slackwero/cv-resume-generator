@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from cv_generator.models.cv import GeneratedCV
-from cv_generator.storage.repo import read_json, save_json
+from cv_generator.storage.repo import read_json, save_json, why_unreadable
 
 HISTORY_FILE = "history.json"
 CVS_SUBDIR = "cvs"
@@ -93,14 +93,33 @@ def _sort(entries: list[HistoryEntry]) -> list[HistoryEntry]:
     return sorted(entries, key=lambda entry: entry.created, reverse=True)
 
 
+class UnreadableHistoryError(ValueError):
+    """history.json is there but is not a list of CVs: not text, not JSON, or not its shape.
+
+    A ValueError, and every change reads the index first, so none writes over a damaged one.
+    """
+
+
+class _HistoryIndex(BaseModel):
+    """The file as a whole, so a wrong shape anywhere is a validation error that says where."""
+
+    entries: list[HistoryEntry] = []
+
+
 def load_history(data_dir: Path) -> list[HistoryEntry]:
-    """Reads the index. Returns an empty list if no CV has been generated yet."""
+    """Reads the index. Returns an empty list if no CV has been generated yet.
+
+    A file that is not a list of CVs raises `UnreadableHistoryError`, saying where it breaks.
+    """
     path = _index_path(data_dir)
     if not path.is_file():
         return []
 
-    data = read_json(path)
-    return _sort([HistoryEntry.model_validate(item) for item in data.get("entries", [])])
+    try:
+        index = _HistoryIndex.model_validate(read_json(path))
+    except ValueError as error:
+        raise UnreadableHistoryError(why_unreadable(HISTORY_FILE, "a list of CVs", error)) from error
+    return _sort(index.entries)
 
 
 def save_history(data_dir: Path, entries: list[HistoryEntry]) -> None:
@@ -197,16 +216,45 @@ def rebuild_history(data_dir: Path) -> list[HistoryEntry]:
     A CV whose snapshot is gone disappears from the index: that part is a cache, and the
     function exists precisely so the index tells the truth again.
     """
+    kept = {entry.cv_id: entry.model_dump(include=set(USER_SET_FIELDS)) for entry in load_history(data_dir)}
+    entries = _entries_from_snapshots(data_dir, kept)
+    save_history(data_dir, entries)
+    return _sort(entries)
+
+
+def rebuild_unreadable_history(data_dir: Path, moment: datetime) -> tuple[list[HistoryEntry], Path]:
+    """Rebuilds an index that cannot be read, keeping the damaged one aside.
+
+    What only the index knew (`USER_SET_FIELDS`) is in the damaged file, so it cannot be
+    carried over; the file is kept as history.<date>.json, next to the new one, for
+    whoever wants it back. The rows are built before anything moves: a damaged snapshot
+    stops the rebuild and leaves both files as they were.
+
+    Returns the rows, newest first, and where the damaged file was kept.
+    """
+    entries = _entries_from_snapshots(data_dir, kept={})
+    aside = data_dir / f"history.{moment:%Y%m%d-%H%M%S}.json"
+    _index_path(data_dir).replace(aside)
+    save_history(data_dir, entries)
+    return _sort(entries), aside
+
+
+def _entries_from_snapshots(data_dir: Path, kept: dict[str, dict[str, object]]) -> list[HistoryEntry]:
+    """One row per snapshot in data/cvs, with what the user had set on it in `kept`.
+
+    Raises:
+        ValueError: naming the snapshot that is not a CV.
+    """
     directory = cvs_dir(data_dir)
     snapshots = sorted(directory.glob("*.json")) if directory.is_dir() else []
 
-    kept = {entry.cv_id: entry.model_dump(include=set(USER_SET_FIELDS)) for entry in load_history(data_dir)}
-
     entries = []
     for path in snapshots:
-        entry = HistoryEntry.from_cv(GeneratedCV.model_validate(read_json(path)))
+        try:
+            cv = GeneratedCV.model_validate(read_json(path))
+        except ValueError as error:
+            raise ValueError(why_unreadable(path.name, "a CV", error)) from error
+        entry = HistoryEntry.from_cv(cv)
         previous_one = kept.get(entry.cv_id)
         entries.append(entry.model_copy(update=previous_one) if previous_one else entry)
-
-    save_history(data_dir, entries)
-    return _sort(entries)
+    return entries

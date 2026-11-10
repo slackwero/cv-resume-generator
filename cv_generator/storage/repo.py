@@ -8,6 +8,8 @@ from os import close as _close_fd
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 # Waits between attempts to replace a file another program holds; replaced in tests.
 _sleep = time.sleep
 _REPLACE_WAITS = (0.05, 0.1, 0.2, 0.4)
@@ -16,6 +18,25 @@ _REPLACE_WAITS = (0.05, 0.1, 0.2, 0.4)
 def read_json(path: Path) -> dict[str, Any]:
     """Loads a JSON document from disk."""
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def why_unreadable(file_name: str, holds: str, error: ValueError) -> str:
+    """Where a file of the app breaks, on one line the owner can act on.
+
+    `holds` is what the file should hold, for a file that is JSON but not of that shape:
+    "a profile". Pydantic's own text for that is a dozen lines with links.
+    """
+    if isinstance(error, UnicodeDecodeError):
+        return f"{file_name} is not UTF-8 text"
+    if isinstance(error, json.JSONDecodeError):
+        return f"{file_name} is not valid JSON (line {error.lineno}, column {error.colno})"
+    if isinstance(error, ValidationError):
+        problems = error.errors()
+        first = problems[0]
+        where = ".".join(str(part) for part in first["loc"]) or "the whole file"
+        more = f", and {len(problems) - 1} more" if len(problems) > 1 else ""
+        return f"{file_name} does not have the shape of {holds}: {where} ({first['msg'].lower()}){more}"
+    return f"{file_name} could not be read: {error}"
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:

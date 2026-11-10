@@ -34,11 +34,11 @@ def test_home_opens_and_says_why_there_is_no_profile(damaged: Path) -> None:
     home = new_state(HomeState)
 
     run(HomeState.load, home)
-    assert home.message.startswith(UNREADABLE)
+    assert home.profile_error.startswith(UNREADABLE)
     assert not home.has_profile
 
     run(HomeState.switch_language, home, "es")
-    assert home.message.startswith(UNREADABLE)
+    assert home.profile_error.startswith(UNREADABLE)
     assert damaged.read_bytes() == DAMAGED
 
 

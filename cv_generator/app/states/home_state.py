@@ -9,7 +9,7 @@ from typing import Any
 import reflex as rx
 
 from cv_generator.app.config import DATA_DIR, OUTPUT_DIR
-from cv_generator.app.errors import pdf_not_written, profile_not_read, readable, viewer_not_opened
+from cv_generator.app.errors import history_not_read, pdf_not_written, profile_not_read, readable, viewer_not_opened
 from cv_generator.app.focus import focus_on
 from cv_generator.models.profile import MasterProfile
 from cv_generator.rendering.i18n import available_languages, load_language
@@ -22,7 +22,7 @@ from cv_generator.services.profile import (
 )
 from cv_generator.services.system import ViewerUnavailable, open_with_viewer
 from cv_generator.services.translations import pending_totals
-from cv_generator.storage.history import archive_cv, load_history, note_archive_reason
+from cv_generator.storage.history import archive_cv, load_history, note_archive_reason, rebuild_unreadable_history
 from cv_generator.text import normalize, plural
 
 # How many rows the scheme needs at least to read as a scheme and not as a loose card,
@@ -56,6 +56,8 @@ class HomeState(rx.State):
     history: list[dict[str, str]] = []
 
     has_profile: bool = False
+    # Why profile.json could not be read: then there is a profile, just not one to use.
+    profile_error: str = ""
     profile_headline: str = ""
     profile_summary: str = ""
     # The summary breakdown, row by row, to lay it out as a status table.
@@ -68,6 +70,8 @@ class HomeState(rx.State):
     pending_summary: str = ""
 
     notices: list[str] = []
+    # Why history.json could not be read. The page offers to rebuild it from data/cvs.
+    history_error: str = ""
     message: str = ""
     notice: str = ""
     search_query: str = ""
@@ -91,12 +95,14 @@ class HomeState(rx.State):
         self._load_history()
 
     def _profile_on_disk(self) -> MasterProfile | None:
-        """The profile, or None when there is none or it cannot be read, which the message says."""
+        """The profile, or None when there is none or it cannot be read, which `profile_error` says."""
         try:
-            return load_profile(DATA_DIR)
+            profile = load_profile(DATA_DIR)
         except (ValueError, OSError) as error:
-            self.message = profile_not_read(error)
+            self.profile_error = profile_not_read(error)
             return None
+        self.profile_error = ""
+        return profile
 
     def _load_profile(self, profile: MasterProfile | None) -> None:
         self.has_profile = profile is not None
@@ -179,7 +185,13 @@ class HomeState(rx.State):
         )
 
     def _load_history(self) -> None:
-        entries = load_history(DATA_DIR)
+        try:
+            entries = load_history(DATA_DIR)
+        except (ValueError, OSError) as error:
+            self.history_error = history_not_read(error)
+            self.history = []
+            return
+        self.history_error = ""
         # The rail number is assigned ONCE, over the full list and by age: the first CV you
         # generated is rail 01 and stays that way forever. It used to be derived from the
         # index in the already filtered list, so it renumbered just by typing in the search
@@ -232,10 +244,30 @@ class HomeState(rx.State):
         self.notice = ""
         try:
             archive_cv(DATA_DIR, cv_id, archived=archived)
-        except (KeyError, OSError) as error:
+        except (KeyError, ValueError, OSError) as error:
             self.message = f"That CV could not be archived: {readable(error)}"
             return
         self._load_history()
+
+    @rx.event
+    def rebuild_list(self) -> None:
+        """Rebuilds a list that cannot be read from the copy each CV keeps in data/cvs.
+
+        The damaged file is kept aside, not deleted: whether a CV was archived, and why,
+        was only in it.
+        """
+        self.message = ""
+        self.notice = ""
+        try:
+            entries, aside = rebuild_unreadable_history(DATA_DIR, datetime.now())  # noqa: DTZ005
+        except (ValueError, OSError) as error:
+            self.message = f"The list could not be rebuilt: {readable(error)}"
+            return
+        self._load_history()
+        self.notice = (
+            f"The list was rebuilt from {plural(len(entries), 'CV', 'CVs')} in data/cvs. "
+            f"The damaged one is kept as {aside.name}: if you had archived CVs, archive them again."
+        )
 
     @rx.var
     def visible_history(self) -> list[dict[str, str]]:
@@ -258,7 +290,7 @@ class HomeState(rx.State):
         self.message = ""
         try:
             note_archive_reason(DATA_DIR, cv_id, reason)
-        except (KeyError, OSError) as error:
+        except (KeyError, ValueError, OSError) as error:
             self.message = f"The reason could not be saved: {readable(error)}"
             return
         self._load_history()

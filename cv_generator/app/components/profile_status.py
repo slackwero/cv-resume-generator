@@ -94,7 +94,11 @@ def profile_status() -> rx.Component:
         rx.el.div(
             legend("Master profile"),
             rx.el.h2(
-                rx.cond(HomeState.has_profile, HomeState.profile_headline, "No profile"),
+                rx.cond(
+                    HomeState.has_profile,
+                    HomeState.profile_headline,
+                    rx.cond(HomeState.profile_error != "", "Unreadable profile", "No profile"),
+                ),
                 style={
                     "font_stretch": "75%",
                     "font_weight": "700",

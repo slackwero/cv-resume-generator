@@ -10,6 +10,7 @@ import errno
 from pathlib import Path
 
 from cv_generator.services.profile import UnreadableProfileError
+from cv_generator.storage.history import UnreadableHistoryError
 
 _PERMISSION = {errno.EACCES, errno.EPERM}
 
@@ -57,6 +58,21 @@ def profile_not_read(error: BaseException) -> str:
         message += (
             " Nothing was written over it. Fix data/profile.json, or replace it with one of the copies "
             "next to it (profile.<date>.json), and open this page again."
+        )
+    return message
+
+
+def history_not_read(error: BaseException) -> str:
+    """Why the list of CVs could not be read, for its notice.
+
+    The list is an index over data/cvs, where every CV keeps its own copy, so a damaged
+    one has a way out the app itself can take: rebuilding it from those copies.
+    """
+    message = f"Your list of CVs could not be read: {readable(error)}."
+    if isinstance(error, UnreadableHistoryError):
+        message += (
+            " Nothing was written over it, and every CV is still in data/cvs. "
+            "Rebuild the list from them in My CVs; the damaged file is kept next to the new one."
         )
     return message
 

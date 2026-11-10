@@ -16,7 +16,7 @@ from cv_generator.app.config import (
     DEFAULT_TEMPLATE,
     OUTPUT_DIR,
 )
-from cv_generator.app.errors import profile_not_read, readable, viewer_not_opened
+from cv_generator.app.errors import history_not_read, profile_not_read, readable, viewer_not_opened
 from cv_generator.models.cv import CVContent, JobPosting, SelectedExperience, Selection
 from cv_generator.models.profile import Achievement, Experience, MasterProfile
 from cv_generator.models.sections import Section, SectionKind
@@ -56,6 +56,7 @@ from cv_generator.services.translations import (
     text_in,
     text_key,
 )
+from cv_generator.storage.history import UnreadableHistoryError
 from cv_generator.tailoring.keywords import analyze_coverage, mentioned_terms
 from cv_generator.tailoring.resolver import resolve_content
 from cv_generator.text import plural
@@ -1604,6 +1605,11 @@ class WizardState(rx.State):
                 f"The PDF could not be written to output/: {readable(error)}. "
                 "Check that the folder exists and is writable."
             )
+            self.generating = False
+            return
+        except UnreadableHistoryError as error:
+            # Raised before anything is written, and it is the list, not the selection.
+            self.action_error = history_not_read(error)
             self.generating = False
             return
         except (KeyError, ValueError) as error:

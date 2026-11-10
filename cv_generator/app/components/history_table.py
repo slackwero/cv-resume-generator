@@ -393,10 +393,18 @@ def _empty() -> rx.Component:
                 "as rail 01, with what you sent frozen inside.",
                 style={"color": TEXT_FAINT, "max_width": "52ch", "line_height": "1.55"},
             ),
-            rx.el.p(
-                "There is no profile to start from yet. Import yours from LinkedIn and, "
-                "from then on, every CV you generate will open its own rail here.",
-                style={"color": TEXT_FAINT, "max_width": "52ch", "line_height": "1.55"},
+            rx.cond(
+                HomeState.profile_error != "",
+                rx.el.p(
+                    "Your profile could not be read, so no CV can be generated yet. Once it is fixed, "
+                    "every CV you generate will open its own rail here.",
+                    style={"color": TEXT_FAINT, "max_width": "52ch", "line_height": "1.55"},
+                ),
+                rx.el.p(
+                    "There is no profile to start from yet. Import yours from LinkedIn and, "
+                    "from then on, every CV you generate will open its own rail here.",
+                    style={"color": TEXT_FAINT, "max_width": "52ch", "line_height": "1.55"},
+                ),
             ),
         ),
         style={

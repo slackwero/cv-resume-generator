@@ -10,8 +10,9 @@ import os
 
 import pytest
 
-from cv_generator.app.errors import as_sentence, pdf_not_written, profile_not_read, readable
+from cv_generator.app.errors import as_sentence, history_not_read, pdf_not_written, profile_not_read, readable
 from cv_generator.services.profile import UnreadableProfileError
+from cv_generator.storage.history import UnreadableHistoryError
 
 
 def test_a_message_written_for_the_screen_goes_as_it_is() -> None:
@@ -82,3 +83,22 @@ def test_a_profile_the_system_would_not_open_gets_no_advice_about_editing_it() -
     message = profile_not_read(error)
 
     assert message == "Your profile could not be read: this computer did not let the app use its data folder."
+
+
+def test_an_unreadable_list_of_cvs_points_to_the_rebuild() -> None:
+    message = history_not_read(UnreadableHistoryError("history.json is not valid JSON (line 1, column 12)"))
+
+    assert message.startswith(
+        "Your list of CVs could not be read: history.json is not valid JSON (line 1, column 12). "
+    )
+    assert "Nothing was written over it" in message
+    assert "Rebuild the list" in message
+
+
+def test_a_list_the_system_would_not_open_gets_no_rebuild_advice() -> None:
+    error = PermissionError(errno.EACCES, "Permission denied", "/Users/someone/cv/data/history.json")
+
+    assert (
+        history_not_read(error)
+        == "Your list of CVs could not be read: this computer did not let the app use its data folder."
+    )

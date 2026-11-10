@@ -11,6 +11,7 @@ import pytest
 
 from cv_generator.storage.history import (
     HistoryEntry,
+    UnreadableHistoryError,
     archive_cv,
     load_history,
     note_archive_reason,
@@ -123,3 +124,44 @@ def test_an_index_written_before_the_field_is_still_valid(tmp_path: Path) -> Non
     assert len(entries) == 1
     assert entries[0].archived is False
     assert entries[0].has_posting is False
+
+
+DAMAGED = b'{"entries": [ '
+
+
+def test_a_list_file_that_is_not_json_says_where_it_breaks(tmp_path: Path) -> None:
+    (tmp_path / "history.json").write_text('[{"cv_id": ', encoding="utf-8")
+
+    with pytest.raises(UnreadableHistoryError, match=r"^history\.json is not valid JSON \(line 1, column 12\)$"):
+        load_history(tmp_path)
+
+
+def test_a_list_file_without_its_shape_says_so(tmp_path: Path) -> None:
+    (tmp_path / "history.json").write_text("[1, 2]", encoding="utf-8")
+
+    with pytest.raises(
+        UnreadableHistoryError, match=r"^history\.json does not have the shape of a list of CVs: the whole file "
+    ):
+        load_history(tmp_path)
+
+
+def test_an_unreadable_list_is_still_a_value_error() -> None:
+    """Every write reads the list first, so a damaged one is never written over."""
+    assert issubclass(UnreadableHistoryError, ValueError)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda folder: archive_cv(folder, "cv-1", archived=True),
+        lambda folder: note_archive_reason(folder, "cv-1", "Closed"),
+        lambda folder: rename_entry(folder, "cv-1", "Northwind"),
+    ],
+)
+def test_no_change_writes_over_an_unreadable_list(tmp_path: Path, change: object) -> None:
+    (tmp_path / "history.json").write_bytes(DAMAGED)
+
+    with pytest.raises(UnreadableHistoryError):
+        change(tmp_path)  # type: ignore[operator]
+
+    assert (tmp_path / "history.json").read_bytes() == DAMAGED

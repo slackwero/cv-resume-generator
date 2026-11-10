@@ -11,6 +11,7 @@ from cv_generator.app.styles import (
     RULE_LINE,
     TEXT,
     primary_button,
+    secondary_button,
     touch_target,
 )
 
@@ -20,21 +21,26 @@ def _primary_action() -> rx.Component:
 
     Without a profile nothing can be generated, so the primary action is the one that
     unblocks it: promising "generate" here would contradict the scheme, which would be
-    empty for a reason generating does not solve.
+    empty for a reason generating does not solve. A profile that cannot be read gets no
+    plate: neither generating nor importing fixes it, and its notice says what does.
     """
     return rx.cond(
-        HomeState.has_profile,
-        primary_button(
-            rx.icon("plus", size=16, stroke_width=2),
-            "Generate new CV",
-            on_click=HomeState.new_cv,
-            style={**touch_target(), "min_height": "3rem", "padding": "0 1.5rem", "font_size": "0.75rem"},
-        ),
-        primary_button(
-            rx.icon("download", size=16, stroke_width=2),
-            "Import from LinkedIn",
-            on_click=HomeState.open_sync,
-            style={**touch_target(), "min_height": "3rem", "padding": "0 1.5rem", "font_size": "0.75rem"},
+        HomeState.profile_error != "",
+        rx.fragment(),
+        rx.cond(
+            HomeState.has_profile,
+            primary_button(
+                rx.icon("plus", size=16, stroke_width=2),
+                "Generate new CV",
+                on_click=HomeState.new_cv,
+                style={**touch_target(), "min_height": "3rem", "padding": "0 1.5rem", "font_size": "0.75rem"},
+            ),
+            primary_button(
+                rx.icon("download", size=16, stroke_width=2),
+                "Import from LinkedIn",
+                on_click=HomeState.open_sync,
+                style={**touch_target(), "min_height": "3rem", "padding": "0 1.5rem", "font_size": "0.75rem"},
+            ),
         ),
     )
 
@@ -61,6 +67,24 @@ def _message(text: rx.Var, icon_name: str, *, severe: bool = False) -> rx.Compon
     )
 
 
+def _unreadable_list() -> rx.Component:
+    """In place of the scheme when history.json cannot be read: why, and the way back.
+
+    An empty scheme here would say no CV was ever generated, and every one is still in
+    data/cvs, where the list is rebuilt from.
+    """
+    return rx.el.div(
+        _message(HomeState.history_error, "circle_alert", severe=True),
+        secondary_button(
+            rx.icon("rotate_ccw", size=13, stroke_width=1.75),
+            "Rebuild the list",
+            on_click=HomeState.rebuild_list,
+            style={**touch_target(), "font_size": "0.625rem"},
+        ),
+        style={"display": "flex", "flex_direction": "column", "align_items": "flex-start", "gap": "0.75rem"},
+    )
+
+
 def home_page() -> rx.Component:
     """Start screen: the full scheme of applications sent."""
     return page(
@@ -68,7 +92,12 @@ def home_page() -> rx.Component:
         "Every CV you generate opens its own rail and stays frozen exactly as you sent it.",
         rx.cond(HomeState.notice != "", _message(HomeState.notice, "circle_check"), rx.fragment()),
         rx.cond(HomeState.message != "", _message(HomeState.message, "circle_alert", severe=True), rx.fragment()),
-        history_table(),
+        rx.cond(
+            HomeState.profile_error != "",
+            _message(HomeState.profile_error, "circle_alert", severe=True),
+            rx.fragment(),
+        ),
+        rx.cond(HomeState.history_error != "", _unreadable_list(), history_table()),
         actions=_primary_action(),
         strip=legend_strip(profile_status()),
         switch=language_switch(HomeState.language, HomeState.switch_language),
@@ -77,7 +106,11 @@ def home_page() -> rx.Component:
             data_cell("Archived", HomeState.archived_total.to_string()),
             data_cell(
                 "Profile",
-                rx.cond(HomeState.has_profile, "Tied", "Untied"),
+                rx.cond(
+                    HomeState.profile_error != "",
+                    "Unreadable",
+                    rx.cond(HomeState.has_profile, "Tied", "Untied"),
+                ),
             ),
         ),
     )

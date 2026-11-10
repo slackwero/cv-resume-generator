@@ -14,10 +14,12 @@ from cv_generator.services.generation import generate_cv, load_cv, regenerate_pd
 from cv_generator.services.professions import add_profession
 from cv_generator.services.translations import save_translation, text_key
 from cv_generator.storage.history import (
+    UnreadableHistoryError,
     archive_cv,
     load_history,
     note_archive_reason,
     rebuild_history,
+    rebuild_unreadable_history,
 )
 from tests.bilingual import sample_profile
 from tests.test_models_personal import REQUIRED
@@ -557,3 +559,63 @@ def test_a_profession_written_only_in_spanish_prints_its_spanish_in_english(tmp_
     cv = _generate_in(tmp_path, profile, selection, "en")
 
     assert cv.content.personal.profession == "Arquitecta de seguridad"
+
+
+def _generate_into(data_dir: Path, output_dir: Path, profile: MasterProfile, selection: Selection) -> GeneratedCV:
+    return generate_cv(
+        profile=profile,
+        selection=selection,
+        cv_name="DevSecOps at Acme",
+        target_role="DevSecOps",
+        language="es",
+        template="modern",
+        data_dir=data_dir,
+        output_dir=output_dir,
+        created=CREATED,
+    )
+
+
+def test_a_damaged_list_stops_the_cv_before_anything_is_written(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    """Writing first left a PDF in output/ and a copy in data/cvs that no list showed."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "history.json").write_bytes(b'{"entries": [ ')
+
+    with pytest.raises(UnreadableHistoryError):
+        _generate_into(data_dir, tmp_path / "output", profile, selection)
+
+    assert not (tmp_path / "output").exists()
+    assert not (data_dir / "cvs").exists()
+
+
+def test_an_unreadable_list_is_rebuilt_from_the_cvs_and_kept_aside(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    data_dir = tmp_path / "data"
+    _generate_into(data_dir, tmp_path / "output", profile, selection)
+    damaged = b'{"entries": [ '
+    (data_dir / "history.json").write_bytes(damaged)
+
+    history, aside = rebuild_unreadable_history(data_dir, datetime(2026, 11, 10, 18, 30, 5))  # noqa: DTZ001
+
+    assert [entry.cv_name for entry in history] == ["DevSecOps at Acme"]
+    assert [entry.cv_name for entry in load_history(data_dir)] == ["DevSecOps at Acme"]
+    assert aside == data_dir / "history.20261110-183005.json"
+    assert aside.read_bytes() == damaged
+
+
+def test_a_damaged_cv_copy_stops_the_rebuild_and_moves_nothing(
+    tmp_path: Path, profile: MasterProfile, selection: Selection
+) -> None:
+    data_dir = tmp_path / "data"
+    cv = _generate_into(data_dir, tmp_path / "output", profile, selection)
+    (data_dir / "history.json").write_bytes(b"{")
+    (data_dir / "cvs" / f"{cv.cv_id}.json").write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"^{cv.cv_id}\.json is not valid JSON"):
+        rebuild_unreadable_history(data_dir, datetime(2026, 11, 10, 18, 30, 5))  # noqa: DTZ001
+
+    assert (data_dir / "history.json").read_bytes() == b"{"
+    assert list(data_dir.glob("history.*.json")) == []

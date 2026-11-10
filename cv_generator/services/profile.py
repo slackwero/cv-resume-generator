@@ -3,17 +3,16 @@
 It isolates the interface from the details of where and how the files are stored.
 """
 
-import json
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from cv_generator.models.profile import FIRST_PROFESSION_ID, MasterProfile, PersonalInfo, Profession
 from cv_generator.services.placeholders import PENDING_FIELD  # noqa: F401  (re-exported: callers import it from here)
 from cv_generator.services.professions import with_profession_mirror
 from cv_generator.services.translations import text_key
-from cv_generator.storage.repo import read_json, save_json
+from cv_generator.storage.repo import read_json, save_json, why_unreadable
 
 PROFILE_FILE = "profile.json"
 SYNC_FILE = "sync_state.json"
@@ -111,15 +110,6 @@ class UnreadableProfileError(ValueError):
     """
 
 
-def _first_problem(error: ValidationError) -> str:
-    """Where pydantic's report starts, on one line: its own text is a dozen lines with links."""
-    problems = error.errors()
-    first = problems[0]
-    where = ".".join(str(part) for part in first["loc"]) or "the whole file"
-    more = f", and {len(problems) - 1} more" if len(problems) > 1 else ""
-    return f"{where} ({first['msg'].lower()}){more}"
-
-
 def load_profile(data_dir: Path) -> MasterProfile | None:
     """Returns the master profile, or None if none was created yet.
 
@@ -133,16 +123,8 @@ def load_profile(data_dir: Path) -> MasterProfile | None:
 
     try:
         profile = MasterProfile.model_validate(read_json(path))
-    except UnicodeDecodeError as error:
-        raise UnreadableProfileError(f"{PROFILE_FILE} is not UTF-8 text") from error
-    except json.JSONDecodeError as error:
-        raise UnreadableProfileError(
-            f"{PROFILE_FILE} is not valid JSON (line {error.lineno}, column {error.colno})"
-        ) from error
-    except ValidationError as error:
-        raise UnreadableProfileError(
-            f"{PROFILE_FILE} does not have the shape of a profile: {_first_problem(error)}"
-        ) from error
+    except ValueError as error:
+        raise UnreadableProfileError(why_unreadable(PROFILE_FILE, "a profile", error)) from error
     return _upgraded(data_dir, profile)
 
 
