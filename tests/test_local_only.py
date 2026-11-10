@@ -163,9 +163,20 @@ def test_the_backend_listens_only_on_this_computer() -> None:
 
 
 def test_the_whole_backend_goes_through_the_local_only_middleware() -> None:
+    """Reflex applies the transformers in order, so the last one is the outermost: it sees
+    every request first, before any other layer reads it."""
     from cv_generator.app.app import app
 
-    assert app.api_transformer is LocalOnlyMiddleware
+    assert isinstance(app.api_transformer, list)
+    assert app.api_transformer[-1] is LocalOnlyMiddleware
+
+
+def test_uploads_are_limited_before_they_are_stored() -> None:
+    from cv_generator.app.app import app
+    from cv_generator.app.upload_limit import UploadLimitMiddleware
+
+    assert isinstance(app.api_transformer, list)
+    assert UploadLimitMiddleware in app.api_transformer
 
 
 @pytest.mark.parametrize(

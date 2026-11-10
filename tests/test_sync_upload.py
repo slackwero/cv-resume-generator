@@ -108,3 +108,18 @@ def test_a_file_larger_than_any_export_is_refused_unread(screen: SyncState, monk
     run(SyncState.process_file, screen, [_upload("export.zip", b"PK" + b"x" * 8)])
 
     assert len(analyzed) == 1, "a file of exactly the limit goes through"
+
+
+@pytest.mark.parametrize(
+    ("code", "said"),
+    [
+        ("file-too-large", "larger than 100 MB"),
+        ("file-invalid-type", "Accepted: .pdf, .zip"),
+        ("too-many-files", "one file at a time"),
+    ],
+)
+def test_a_file_the_box_refuses_is_said(screen: SyncState, code: str, said: str) -> None:
+    """The box refuses it in the browser, before uploading anything: without a word it seemed broken."""
+    run(SyncState.refuse_file, screen, [{"file": {}, "errors": [{"code": code, "message": "react-dropzone's"}]}])
+
+    assert said in screen.error_message

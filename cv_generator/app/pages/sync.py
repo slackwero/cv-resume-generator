@@ -10,6 +10,7 @@ import reflex as rx
 
 from cv_generator.app.components.header import data_cell, data_group, legend_strip, page
 from cv_generator.app.components.sync_diff import change_list, changes_summary
+from cv_generator.app.config import MAX_UPLOAD_BYTES
 from cv_generator.app.states.sync_state import (
     PHASE_APPLIED,
     PHASE_CHOOSE,
@@ -94,7 +95,9 @@ def _choose_step() -> rx.Component:
             ),
             id=UPLOAD_ID,
             max_files=1,
+            max_size=MAX_UPLOAD_BYTES,
             accept={"application/pdf": [".pdf"], "application/zip": [".zip"]},
+            on_drop_rejected=SyncState.refuse_file,
             # The input[type=file] stays hidden behind the box and rx.upload exposes no prop to
             # name it. What receives focus and keyboard is this container (react-dropzone gives it
             # tabIndex=0), so the accessible name goes here.

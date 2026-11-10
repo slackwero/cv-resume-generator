@@ -11,15 +11,18 @@ from cv_generator.app.private_files import keep_app_files_private
 from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.states.profession_state import ProfessionState
 from cv_generator.app.states.translation_state import TranslationState
+from cv_generator.app.upload_limit import UploadLimitMiddleware
 
 # The whole interface is in English: this declares it, so a screen reader reads the
 # labels with the right pronunciation.
 app = rx.App(
     html_lang="en",
-    # The app has no login, so this wraps the whole backend (routes, the websocket and
-    # uploads) and refuses what does not come from the app's own page: another host name
-    # (DNS rebinding) and other websites open in the browser. See local_only.py.
-    api_transformer=LocalOnlyMiddleware,
+    # Applied in order, so the last one is the outermost. The app has no login, so
+    # LocalOnlyMiddleware wraps the whole backend (routes, the websocket and uploads) and
+    # refuses what does not come from the app's own page: another host name (DNS
+    # rebinding) and other websites open in the browser. See local_only.py. Inside it, an
+    # upload is cut while it arrives once it passes the size of any export (upload_limit.py).
+    api_transformer=[UploadLimitMiddleware, LocalOnlyMiddleware],
     # The jackfield stylesheet: it declares the self-hosted typeface, themes the surfaces
     # the browser draws (selection, caret, scrollbars, focus ring) and defines the
     # geometry of the link rail.

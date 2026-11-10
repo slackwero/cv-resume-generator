@@ -8,7 +8,7 @@ from pathlib import Path
 
 import reflex as rx
 
-from cv_generator.app.config import DATA_DIR
+from cv_generator.app.config import DATA_DIR, MAX_UPLOAD_BYTES, MEGABYTE
 from cv_generator.app.errors import readable
 from cv_generator.importers.base import PartialPersonalInfo
 from cv_generator.importers.merge import Change, ChangeKind
@@ -34,11 +34,6 @@ UPLOAD_ID = "export_linkedin"
 # and must not be used to build a path. The extension decides which importer is used,
 # so it is taken from the list of supported formats and never from the received name.
 SAFE_FILENAME = "export_linkedin"
-
-MEGABYTE = 1024 * 1024
-# The profile PDF weighs a few hundred KB and the full data archive a few MB. The file is
-# read whole into memory, so anything larger is refused before that, unread.
-MAX_UPLOAD_BYTES = 100 * MEGABYTE
 
 
 def _forget_old_copies() -> None:
@@ -164,6 +159,23 @@ class SyncState(rx.State):
         )
 
     @rx.event
+    def refuse_file(self, rejections: list[dict]) -> None:
+        """Says why the box refused a file in the browser, before uploading anything.
+
+        Without a word, a file too large or of another type seemed to do nothing.
+        """
+        codes = {error.get("code") for rejection in rejections for error in rejection.get("errors", [])}
+        if "file-too-large" in codes:
+            self.error_message = (
+                f"That file is larger than {MAX_UPLOAD_BYTES // MEGABYTE} MB, far more than a LinkedIn "
+                "export. Upload the ZIP or the PDF LinkedIn gave you."
+            )
+        elif "too-many-files" in codes:
+            self.error_message = "Upload one file at a time: the ZIP or the PDF."
+        else:
+            self.error_message = f"That file is not one LinkedIn gives. Accepted: {', '.join(sorted(IMPORTERS))}"
+
+    @rx.event
     async def process_file(self, files: list[rx.UploadFile]) -> AsyncGenerator[None, None]:
         """Saves the uploaded export and works out what would change in the profile.
 
@@ -192,6 +204,7 @@ class SyncState(rx.State):
         # Whatever happens, the box takes another file: a bug is raised for Reflex to report,
         # but it does not leave the screen stuck on "Reading the file…".
         try:
+            # Read whole into memory, so anything larger is refused before that, unread.
             try:
                 content = await files[0].read(MAX_UPLOAD_BYTES + 1)
             except OSError as error:
