@@ -32,3 +32,14 @@ def screen_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for module in STATE_MODULES:
         monkeypatch.setattr(module, "DATA_DIR", tmp_path)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The folder Reflex serves at `/_upload`, of its own for every test, never the real one.
+
+    `rx.get_upload_dir()` reads the variable on every call.
+    """
+    folder = tmp_path / "uploaded_files"
+    monkeypatch.setenv("REFLEX_UPLOADED_FILES_DIR", str(folder))
+    return folder

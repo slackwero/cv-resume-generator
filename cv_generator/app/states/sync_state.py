@@ -115,6 +115,8 @@ class SyncState(rx.State):
     @rx.event
     def start(self) -> None:
         """Leaves the screen ready for a new sync."""
+        # The state outlives a reload: a box an older failure left analyzing is freed here.
+        self.analyzing = False
         self.phase = PHASE_CHOOSE
         self.error_message = ""
         self.result_summary = ""
@@ -166,19 +168,22 @@ class SyncState(rx.State):
         self.error_message = ""
         yield
 
+        # Whatever happens, the box takes another file: a bug is raised for Reflex to report,
+        # but it does not leave the screen stuck on "Reading the file…".
         try:
-            content = await files[0].read()
-        except OSError as error:
-            self.error_message = f"The uploaded file could not be read: {readable(error)}"
+            try:
+                content = await files[0].read()
+            except OSError as error:
+                self.error_message = f"The uploaded file could not be read: {readable(error)}"
+                return
+
+            target = rx.get_upload_dir() / f"{SAFE_FILENAME}{extension}"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+
+            await self._analyze(target)
+        finally:
             self.analyzing = False
-            return
-
-        target = rx.get_upload_dir() / f"{SAFE_FILENAME}{extension}"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-
-        await self._analyze(target)
-        self.analyzing = False
 
     async def _analyze(self, path: Path) -> None:
         # Against the profile on disk now and not the one read when the screen opened: an
@@ -197,7 +202,9 @@ class SyncState(rx.State):
 
         try:
             result = await asyncio.to_thread(analyze_file, path, profile)
-        except (ValueError, OSError, KeyError) as error:
+        # Any error: the file is someone else's and the parsers are too. pypdf, zipfile and csv
+        # each raise their own kinds, and a damaged export is not a bug to report.
+        except Exception as error:  # noqa: BLE001
             hint_text = (
                 "Check that it is the ZIP you downloaded from LinkedIn, not unzipped."
                 if path.suffix.lower() == ".zip"
