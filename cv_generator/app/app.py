@@ -7,6 +7,7 @@ import reflex as rx
 
 from cv_generator.app.local_only import LocalOnlyMiddleware
 from cv_generator.app.pages import home, profile, sync, wizard
+from cv_generator.app.private_files import keep_app_files_private
 from cv_generator.app.states.experience_state import ExperienceState
 from cv_generator.app.states.profession_state import ProfessionState
 from cv_generator.app.states.translation_state import TranslationState
@@ -54,6 +55,10 @@ app = rx.App(
         ),
     ],
 )
+
+# Before the first request: the profile, the CVs, the previews and the saved sessions are
+# readable only by the account that runs the app. See private_files.py.
+app.register_lifespan_task(keep_app_files_private)
 
 app.add_page(
     home.home_page,

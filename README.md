@@ -400,7 +400,11 @@ The index can be rebuilt by reading the snapshots, with one exception: what you 
 **after** generating —archiving a CV, when and why— is in no snapshot. Rebuilding
 combines both instead of redoing everything, because recomputing that would erase it.
 
-These files contain personal data and are excluded from git.
+These files contain personal data and are excluded from git. On Linux and macOS the app
+keeps them readable only by the account that runs it: when the backend starts it closes
+`data/`, `output/`, `uploaded_files/` (the PDF preview) and `.states/` (the sessions Reflex
+saves) to other accounts, and writes every new file as 0600. The LinkedIn export you
+upload is read from a private temporary folder and deleted once analyzed.
 
 ## Development
 
