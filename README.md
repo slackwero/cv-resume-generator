@@ -421,6 +421,20 @@ uv run ruff check .        # lint
 uv run ruff format .       # format
 ```
 
+On GitHub, every push also goes through security checks, and their findings land in the
+repository's Security tab:
+
+- **CodeQL** follows untrusted values through the code, looking for flaws such as a path
+  built from a request or a regex that hostile text can freeze.
+- **The dependency audit** checks every locked package, Python (`uv.lock`) and npm
+  (`reflex.lock/bun.lock`), against the [OSV](https://osv.dev) database, and again every
+  Monday. A known advisory passes only while `osv-scanner.toml` says why, and only until
+  its date. To run it locally:
+  `osv-scanner scan source --config=osv-scanner.toml -L uv.lock -L reflex.lock/bun.lock`
+- **Secret scanning** refuses a push that carries a credential.
+- **Dependabot** proposes the next version of every GitHub Action. Each one is pinned to a
+  commit, so its code can't change under the same tag.
+
 Two records go with the code and are worth reading before touching it:
 
 - **`PRODUCT.md`** — what this product is, who it is for, and which constraints cannot

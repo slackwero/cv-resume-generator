@@ -1,0 +1,36 @@
+# Advisories the dependency audit (.github/workflows/dependency-audit.yml) lets pass.
+# All of them are in the frontend toolchain Reflex 0.9.8 installs: it pins vite 8.0.16
+# exactly (fixed in 8.1.6), and @react-router/fs-routes asks for minimatch ^9 (fixed only
+# in 11). Both need a newer Reflex. None reaches the launcher, which runs the production
+# build, where Vite serves nothing. Each entry expires: the audit then fails again and the
+# decision is taken anew.
+
+[[IgnoredVulns]]
+id = "GHSA-rq7h-c2jc-7f22"
+ignoreUntil = 2027-02-10
+reason = "vite: files outside server.fs.allow served. Needs the dev server exposed to the network; rxconfig.py binds it to 127.0.0.1."
+
+[[IgnoredVulns]]
+id = "GHSA-9jrq-w75r-8gcw"
+ignoreUntil = 2027-02-10
+reason = "vite: cross-origin script execution through custom middleware. Needs a dev server that passes the raw request URL to transformIndexHtml; development server only."
+
+[[IgnoredVulns]]
+id = "GHSA-r825-w8mm-5pxw"
+ignoreUntil = 2027-02-10
+reason = "vite (launch-editor): a path read as an editor flag. For Vite users only under WSL, with Vim or Emacs, and a file starting with + or - planted in the project; development server only."
+
+[[IgnoredVulns]]
+id = "GHSA-587h-7wmj-h5pm"
+ignoreUntil = 2027-02-10
+reason = "vite (launch-editor): existence check bypassed on Windows. The Windows launcher runs the production build, where Vite doesn't open editors; development server only."
+
+[[IgnoredVulns]]
+id = "GHSA-698v-4r3x-3vcv"
+ignoreUntil = 2027-02-10
+reason = "vite (launch-editor): % not escaped for cmd on Windows. Needs an attacker-named file plus an injected environment variable or NTFS stream; development server only."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-10
+reason = "minimatch: denial of service from a crafted glob pattern. @react-router/fs-routes matches route files against its own patterns at build time; no user input reaches it."

@@ -1,0 +1,30 @@
+name: Dependency audit
+
+# Checks every locked package, Python (uv.lock) and npm (the frontend Reflex installs,
+# reflex.lock/bun.lock), against the OSV advisory database. Advisories are published
+# without any commit here, so it also runs every Monday. Known advisories that are allowed
+# to pass are in osv-scanner.toml, each with its reason and an expiry date.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scanner:
+    # The findings go to the Security tab, next to CodeQL's.
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    with:
+      scan-args: |-
+        --config=osv-scanner.toml
+        --lockfile=uv.lock
+        --lockfile=reflex.lock/bun.lock
