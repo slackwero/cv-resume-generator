@@ -1,0 +1,15 @@
+# Every action in .github/workflows is pinned to a commit; Dependabot proposes the next
+# one, a week after its release, all in one weekly pull request. Python and npm advisories
+# are watched by the dependency audit (workflows/dependency-audit.yml) instead: GitHub's
+# dependency graph reads neither uv.lock nor bun.lock.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

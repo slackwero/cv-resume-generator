@@ -17,8 +17,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       # WeasyPrint renders the PDFs through these native libraries.
       - name: Install native libraries (Ubuntu)
         if: runner.os == 'Linux'
@@ -75,7 +75,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # git archive writes what GitHub's "Download ZIP" would: the .gitattributes line endings,
       # the file modes, a single top folder, and nothing from .git.
       - name: Build the ZIP
@@ -285,7 +285,7 @@ jobs:
       - name: Install wget only (Ubuntu)
         if: startsWith(matrix.container, 'ubuntu')
         run: apt-get update && apt-get install -y wget ca-certificates
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Put uv's install folder on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Start the launcher
