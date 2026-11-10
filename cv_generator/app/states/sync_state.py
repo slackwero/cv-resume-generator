@@ -1,6 +1,8 @@
 """State of the LinkedIn sync screen."""
 
 import asyncio
+import contextlib
+import tempfile
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -32,6 +34,19 @@ UPLOAD_ID = "export_linkedin"
 # and must not be used to build a path. The extension decides which importer is used,
 # so it is taken from the list of supported formats and never from the received name.
 SAFE_FILENAME = "export_linkedin"
+
+
+def _forget_old_copies() -> None:
+    """Deletes the copy of the export that versions before 2026-11-10 kept.
+
+    They saved the last export in the folder Reflex serves at /_upload, where any program
+    on this computer could download it. One that cannot be deleted is left: the screen still
+    works.
+    """
+    for extension in IMPORTERS:
+        with contextlib.suppress(OSError):
+            (rx.get_upload_dir() / f"{SAFE_FILENAME}{extension}").unlink(missing_ok=True)
+
 
 PHASE_CHOOSE = "choose"
 PHASE_REVIEW = "review"
@@ -117,6 +132,7 @@ class SyncState(rx.State):
         """Leaves the screen ready for a new sync."""
         # The state outlives a reload: a box an older failure left analyzing is freed here.
         self.analyzing = False
+        _forget_old_copies()
         self.phase = PHASE_CHOOSE
         self.error_message = ""
         self.result_summary = ""
@@ -177,11 +193,14 @@ class SyncState(rx.State):
                 self.error_message = f"The uploaded file could not be read: {readable(error)}"
                 return
 
-            target = rx.get_upload_dir() / f"{SAFE_FILENAME}{extension}"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-
-            await self._analyze(target)
+            # The export holds your personal data. It is read from a folder only you can open
+            # and deleted right after, never from the one Reflex serves at /_upload to whoever
+            # asks. On Windows a file a parser left open cannot be deleted: that does not fail
+            # the sync, and the folder stays private.
+            with tempfile.TemporaryDirectory(prefix="cv-generator-", ignore_cleanup_errors=True) as folder:
+                target = Path(folder) / f"{SAFE_FILENAME}{extension}"
+                target.write_bytes(content)
+                await self._analyze(target)
         finally:
             self.analyzing = False
 
