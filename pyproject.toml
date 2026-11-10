@@ -8,7 +8,7 @@ dependencies = [
     "pillow>=13.0.0",
     "pydantic>=2.13.4",
     "pypdf>=6.21.4",
-    "reflex>=0.9.8.post1",
+    "reflex>=0.10.1",
     "weasyprint>=70.0",
 ]
 

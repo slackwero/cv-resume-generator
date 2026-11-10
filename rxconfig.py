@@ -16,11 +16,11 @@ from reflex_components_radix.plugin import RadixThemesPlugin
 os.environ.setdefault("REFLEX_HOT_RELOAD_EXCLUDE_PATHS", "data:output")
 
 # In development the frontend is Vite, which Reflex starts with a bare `--host`: every
-# network interface, so anyone on the same Wi-Fi reached the development server, and the
-# Vite Reflex pins has open advisories that read files through it. Reflex writes this
-# command into .web/package.json on every run, after reading this file, and has no option
-# for it. The production mode (the launcher) serves the frontend through the backend,
-# which already listens only on 127.0.0.1.
+# network interface, so anyone on the same Wi-Fi reached the development server, which
+# serves the project's source files. Reflex writes this command into .web/package.json on
+# every run, after reading this file, and has no option for it. The production mode (the
+# launcher) serves the frontend through the backend, which already listens only on
+# 127.0.0.1.
 PackageJson.Commands.DEV = "react-router dev --host 127.0.0.1"
 
 

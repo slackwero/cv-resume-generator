@@ -11,7 +11,7 @@ def test_reflex_sends_no_telemetry() -> None:
 
 def test_the_development_frontend_listens_only_on_this_computer() -> None:
     """Reflex starts Vite with a bare `--host`, every network interface: anyone on the same
-    Wi-Fi reached the development server, a Vite with open advisories that read files."""
+    Wi-Fi reached the development server, which serves the project's source files."""
     from reflex_base.constants.installer import PackageJson
 
     assert rxconfig.config.backend_host == "127.0.0.1"
