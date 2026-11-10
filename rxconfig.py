@@ -6,6 +6,8 @@ from reflex_base.constants.installer import PackageJson
 from reflex_base.plugins.sitemap import SitemapPlugin
 from reflex_components_radix.plugin import RadixThemesPlugin
 
+from cv_generator.app.route_table import RouteTablePlugin
+
 # In development, Reflex restarts the backend when a file changes in the project
 # folders, except for extensions it knows to ignore. It ignores `.json`, but not the
 # `.profile.json.tmp` used for atomic saves nor the PDFs in output/, so every save made
@@ -22,6 +24,11 @@ os.environ.setdefault("REFLEX_HOT_RELOAD_EXCLUDE_PATHS", "data:output")
 # launcher) serves the frontend through the backend, which already listens only on
 # 127.0.0.1.
 PackageJson.Commands.DEV = "react-router dev --host 127.0.0.1"
+
+# Reflex installs @react-router/fs-routes only to read the route table from the compiled
+# pages, and it needs minimatch 10, with an advisory fixed only in 11. RouteTablePlugin,
+# below, writes the table instead (cv_generator/app/route_table.py).
+PackageJson.DEV_DEPENDENCIES.pop("@react-router/fs-routes", None)
 
 
 class LoopbackConfig(rx.Config):
@@ -90,6 +97,7 @@ config = LoopbackConfig(
                 has_background=False,
             ),
         ),
+        RouteTablePlugin(),
     ],
     # Single-user local app: it does not need a sitemap.
     disable_plugins=[SitemapPlugin],

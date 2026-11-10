@@ -1,7 +1,3 @@
-# Advisories the dependency audit (.github/workflows/dependency-audit.yml) lets pass.
-# Each entry expires: the audit then fails again and the decision is taken anew.
-
-[[IgnoredVulns]]
-id = "GHSA-g3hv-75wg-m249"
-ignoreUntil = 2027-02-10
-reason = "minimatch: denial of service from a crafted glob pattern. @react-router/fs-routes, in the frontend toolchain Reflex installs, asks for minimatch ^10 and matches route files against its own patterns at build time; no user input reaches it. Fixed only in minimatch 11, which removed the makeRe that fs-routes imports."
+# Advisories the dependency audit (.github/workflows/dependency-audit.yml) lets pass, each
+# as an [[IgnoredVulns]] entry with its `id`, its `reason` and an `ignoreUntil` date: once
+# the date passes, the audit fails again and the decision is taken anew. None today.

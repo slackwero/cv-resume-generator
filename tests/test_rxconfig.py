@@ -1,4 +1,6 @@
 import copy
+import json
+from pathlib import Path
 
 import rxconfig
 
@@ -36,3 +38,18 @@ def test_a_port_set_on_the_command_line_keeps_127_0_0_1() -> None:
 
     assert config.api_url == "http://127.0.0.1:8100"
     assert config.deploy_url == "http://127.0.0.1:3100"
+
+
+def test_the_frontend_builds_its_routes_without_fs_routes() -> None:
+    """@react-router/fs-routes needs minimatch 10, whose advisory is fixed only in 11, and 11
+    drops what fs-routes imports. The route table is written from the app's own pages, so
+    fs-routes is neither installed nor kept in the persisted package.json."""
+    from reflex_base.constants.installer import PackageJson
+
+    from cv_generator.app.route_table import RouteTablePlugin
+
+    persisted = json.loads((Path(rxconfig.__file__).parent / "reflex.lock" / "package.json").read_text())
+
+    assert any(isinstance(plugin, RouteTablePlugin) for plugin in rxconfig.config.plugins)
+    assert "@react-router/fs-routes" not in PackageJson.DEV_DEPENDENCIES
+    assert "@react-router/fs-routes" not in persisted["devDependencies"]

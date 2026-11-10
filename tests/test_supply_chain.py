@@ -30,8 +30,7 @@ def test_every_action_is_pinned_to_a_commit() -> None:
 def test_every_ignored_advisory_says_why_and_until_when() -> None:
     """The dependency audit lets a known advisory pass only with its reason written down and
     a date when it stops passing, so an exception can't outlive the decision behind it."""
-    ignored = tomllib.loads(OSV_CONFIG.read_text())["IgnoredVulns"]
-    assert ignored, "nothing is ignored: delete the section instead"
+    ignored = tomllib.loads(OSV_CONFIG.read_text()).get("IgnoredVulns", [])
 
     for entry in ignored:
         assert entry["id"].strip()
