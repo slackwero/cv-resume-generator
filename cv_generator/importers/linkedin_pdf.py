@@ -9,6 +9,7 @@ into their master profile.
 """
 
 import re
+import string
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -33,13 +34,20 @@ HEADINGS = {
 }
 SIDEBAR_SECTIONS = ("contact", "top_skills", "languages")
 
+# The PDF is a file someone hands you: every pattern here runs in time linear in the line.
+# None leaves two ways to split the same characters, which is what let a crafted line
+# backtrack for minutes (tests/test_linkedin_pdf_hostile.py).
 PAGE_PATTERN = re.compile(r"^Page \d+ of \d+$")
 # LinkedIn inserts non-breaking spaces inside the titles.
 UNICODE_SPACES_PATTERN = re.compile(r"[\u00a0\u2000-\u200a\u202f\u205f\u3000]")
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-LEVEL_PATTERN = re.compile(r"^(?P<value>.+?)\s*\((?P<level>[^()]+)\)$")
+# A dot in the domain, neither its first nor its last character. The domain runs up to its
+# first dot after the first character, and nothing else: `[^@\s]+\.[^@\s]+` tried every dot.
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s][^@\s.]*\.[^@\s]+$")
+# The value ends in a non-space, so the spaces before the parenthesis can only go one way.
+LEVEL_PATTERN = re.compile(r"^(?P<value>.*?\S)\s*\((?P<level>[^()]+)\)$")
 GROUPING_PATTERN = re.compile(r"^\d+\s+\w+(\s+\d+\s+\w+)?$")
-STUDY_YEARS_PATTERN = re.compile(r"^(?P<title>.+?)\s*·?\s*\(\s*\d{4}.*\)$")
+# Where the years of a study open: "(2006 - 2012)". See `_study_title`.
+STUDY_YEARS_PATTERN = re.compile(r"\(\s*\d{4}")
 
 # "abril de 2022 - Present (3 años 7 meses)" / "March 2021 - February 2023 (1 year)"
 _MONTH = r"[^\W\d_]+"
@@ -57,7 +65,9 @@ MAX_LOCATION_LENGTH = 60
 # Comunidad Autónoma de Canarias, España". A description with commas always has some lowercase stretch.
 MAX_PLACE_LIST_LENGTH = 90
 MAX_COMPANY_WORDS = 6
-ABBREVIATION_PATTERN = re.compile(r"\b(?:[A-Z]\.){2,}$")
+# "S.A." or "C.A." closing a line, matched on the line backwards and anchored at its start.
+# Searched forwards, `\b(?:[A-Z]\.){2,}$` started over at every initial of a long run.
+REVERSED_ABBREVIATION_PATTERN = re.compile(r"(?:\.[A-Z]){2,}\b")
 
 
 def _month_map() -> dict[str, int]:
@@ -141,16 +151,18 @@ def _looks_like_skill(line: str) -> bool:
 def _join_continuations(lines: list[str]) -> list[str]:
     """Joins the lines the PDF broke by column width.
 
-    A line that starts in lowercase or with a parenthesis continues the previous one.
+    A line that starts in lowercase or with a parenthesis continues the previous one. The
+    pieces are joined once at the end: joining at every line copied the text gathered so
+    far each time, quadratic on a PDF of thousands of broken lines.
     """
-    joined: list[str] = []
+    joined: list[list[str]] = []
     for line in lines:
         continues = joined and (line[0].islower() or line.startswith("("))
         if continues:
-            joined[-1] = f"{joined[-1]} {line}"
+            joined[-1].append(line)
         else:
-            joined.append(line)
-    return joined
+            joined.append([line])
+    return [" ".join(pieces) for pieces in joined]
 
 
 def _parse_contact(lines: list[str]) -> tuple[str | None, str | None]:
@@ -188,7 +200,11 @@ def _looks_like_company(line: str) -> bool:
         return False
     if not line.endswith("."):
         return True
-    return bool(ABBREVIATION_PATTERN.search(line))
+    return _ends_in_abbreviation(line)
+
+
+def _ends_in_abbreviation(line: str) -> bool:
+    return bool(REVERSED_ABBREVIATION_PATTERN.match(line[::-1]))
 
 
 def _header_start(lines: list[str], date_index: int) -> int:
@@ -290,12 +306,27 @@ def _parse_education(lines: list[str]) -> list[Education]:
     studies: list[Education] = []
 
     for index, line in enumerate(joined):
-        found = STUDY_YEARS_PATTERN.match(line)
-        if found is None or index == 0:
+        title = _study_title(line)
+        if title is None or index == 0:
             continue
-        studies.append(Education(institution=joined[index - 1], title=found.group("title").strip(" ·")))
+        studies.append(Education(institution=joined[index - 1], title=title))
 
     return studies
+
+
+def _study_title(line: str) -> str | None:
+    """The title of "Computer Engineering · (2006 - 2012)", or None if the line is not a study.
+
+    The years are the first "(2006" past the first character, in a line that ends with ")".
+    Found by hand and not with one pattern: `^(.+?)\\s*·?\\s*\\(\\s*\\d{4}.*\\)$` could split the
+    spaces before the parenthesis in cubic ways, and a line of 5000 spaces took ~51 s.
+    """
+    if not line.endswith(")"):
+        return None
+    years = STUDY_YEARS_PATTERN.search(line, 1)
+    if years is None:
+        return None
+    return line[: years.start()].rstrip(string.whitespace + "·").lstrip(" ·")
 
 
 def parse_linkedin_profile(text: str) -> ProfileDraft:
