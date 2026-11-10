@@ -72,7 +72,8 @@ def port_state(port: int) -> PortState:
 
 
 def app_url(port: int) -> str:
-    return f"http://localhost:{port}"
+    """Not `localhost`: it may resolve to ::1 first, where another account can listen."""
+    return f"http://127.0.0.1:{port}"
 
 
 def app_command(uv: str, port: int) -> list[str]:

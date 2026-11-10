@@ -68,7 +68,7 @@ No terminal needed on macOS.
    The first start takes a few minutes
    (on a Mac without Homebrew, 10 to 20 more); the next ones take seconds, with no
    questions.
-6. The browser opens on the app. If it does not, go to <http://localhost:3000>. To stop
+6. The browser opens on the app. If it does not, go to <http://127.0.0.1:3000>. To stop
    the app, close the window or press Ctrl+C. If something fails, `start.log` in the same
    folder says what happened.
 
@@ -90,7 +90,7 @@ The quick start above already runs the app. Developers start it in development m
 uv run reflex run
 ```
 
-Then open <http://localhost:3000>. The first start takes a minute or two while Reflex
+Then open <http://127.0.0.1:3000>. The first start takes a minute or two while Reflex
 installs the interface's dependencies; the next ones are quick.
 
 Everything stays on your machine: your profile and your CVs are saved in `data/` and the
@@ -101,7 +101,7 @@ PDFs in `output/`, both excluded from git.
 > whoever can talk to it can see and change your profile and your CVs. Do not deploy it
 > to a public server.
 >
-> On your computer it protects itself: it only answers this computer (`localhost`), and it
+> On your computer it protects itself: it only answers this computer (`127.0.0.1`), and it
 > refuses requests from other websites open in your browser. That includes development
 > mode (`uv run reflex run`): the interface's development server on port 3000 also listens
 > only on this computer.

@@ -109,7 +109,7 @@ def test_an_app_already_running_only_opens_the_browser(
 
     monkeypatch.setattr(app, "start_app", no_start)
     assert main(["--port", "3100"], folder=tmp_path) == 0
-    assert calls.opened == ["http://localhost:3100"]
+    assert calls.opened == ["http://127.0.0.1:3100"]
 
 
 def test_another_program_on_the_port_is_named_plainly(
@@ -243,9 +243,9 @@ def test_a_normal_start_opens_the_browser_and_stops_on_ctrl_c(
     monkeypatch.setattr(app, "start_app", lambda command, folder, log: fake)
     assert main(["--port", "3100"], folder=tmp_path) == 0
     out = capsys.readouterr().out
-    assert calls.opened == ["http://localhost:3100"]
+    assert calls.opened == ["http://127.0.0.1:3100"]
     assert calls.stopped == [fake]
-    assert "CV Generator is running at http://localhost:3100" in out
+    assert "CV Generator is running at http://127.0.0.1:3100" in out
     assert "To stop it, close this window or press Ctrl+C." in out
     assert "CV Generator stopped." in out
 
@@ -267,7 +267,7 @@ def test_a_browser_that_does_not_open_tells_the_person_the_address(
 ) -> None:
     monkeypatch.setattr(app, "open_browser", lambda url: False)
     main([], folder=tmp_path)
-    assert "Open http://localhost:3000 in your browser." in capsys.readouterr().out
+    assert "Open http://127.0.0.1:3000 in your browser." in capsys.readouterr().out
 
 
 def test_an_app_that_never_becomes_ready_is_stopped_and_reported(

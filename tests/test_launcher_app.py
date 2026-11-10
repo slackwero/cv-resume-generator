@@ -162,8 +162,9 @@ def test_something_that_is_not_http_is_another_program(raw_socket_that_closes: i
     assert port_state(raw_socket_that_closes) is PortState.OTHER
 
 
-def test_the_url_uses_localhost() -> None:
-    assert app_url(3100) == "http://localhost:3100"
+def test_the_url_uses_127_0_0_1() -> None:
+    """Not `localhost`, which may resolve to ::1 first, where another account can listen."""
+    assert app_url(3100) == "http://127.0.0.1:3100"
 
 
 def test_the_app_runs_as_a_module_so_a_moved_folder_still_starts() -> None:

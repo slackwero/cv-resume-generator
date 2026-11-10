@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import reflex as rx
 from reflex_base.constants.installer import PackageJson
@@ -22,7 +23,25 @@ os.environ.setdefault("REFLEX_HOT_RELOAD_EXCLUDE_PATHS", "data:output")
 # which already listens only on 127.0.0.1.
 PackageJson.Commands.DEV = "react-router dev --host 127.0.0.1"
 
-config = rx.Config(
+
+class LoopbackConfig(rx.Config):
+    """The config, with the app's own URLs on 127.0.0.1, never on `localhost`.
+
+    `localhost` may resolve to ::1 first, and another account on this computer can listen
+    on ::1 at the same port: the page would load from it, or send it the websocket with the
+    profile in it. Reflex writes `localhost` into the default URLs and rewrites them
+    whenever a port is set (`reflex run --backend-port`, the launcher's single port), so
+    the name is swapped there, after Reflex.
+    """
+
+    def _replace_defaults(self, **kwargs: Any) -> None:  # noqa: ANN401 - Reflex's own signature
+        super()._replace_defaults(**kwargs)
+        self.api_url = self.api_url.replace("://localhost:", "://127.0.0.1:")
+        if self.deploy_url:
+            self.deploy_url = self.deploy_url.replace("://localhost:", "://127.0.0.1:")
+
+
+config = LoopbackConfig(
     app_name="cv_generator",
     app_module_import="cv_generator.app.app",
     # The world is black glass: light mode was dropped by explicit decision on
