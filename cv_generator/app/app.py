@@ -5,6 +5,7 @@ The theme is configured in rxconfig.py through RadixThemesPlugin.
 
 import reflex as rx
 
+from cv_generator.app.access_key import AccessKeyMiddleware, announce_access
 from cv_generator.app.local_only import LocalOnlyMiddleware
 from cv_generator.app.pages import home, profile, sync, wizard
 from cv_generator.app.private_files import keep_app_files_private
@@ -20,9 +21,11 @@ app = rx.App(
     # Applied in order, so the last one is the outermost. The app has no login, so
     # LocalOnlyMiddleware wraps the whole backend (routes, the websocket and uploads) and
     # refuses what does not come from the app's own page: another host name (DNS
-    # rebinding) and other websites open in the browser. See local_only.py. Inside it, an
-    # upload is cut while it arrives once it passes the size of any export (upload_limit.py).
-    api_transformer=[UploadLimitMiddleware, LocalOnlyMiddleware],
+    # rebinding) and other websites open in the browser. See local_only.py. Inside it,
+    # every request carries the app's key, which keeps out other programs on this computer
+    # (access_key.py), and an upload is cut while it arrives once it passes the size of any
+    # export (upload_limit.py).
+    api_transformer=[UploadLimitMiddleware, AccessKeyMiddleware, LocalOnlyMiddleware],
     # The jackfield stylesheet: it declares the self-hosted typeface, themes the surfaces
     # the browser draws (selection, caret, scrollbars, focus ring) and defines the
     # geometry of the link rail.
@@ -33,6 +36,22 @@ app = rx.App(
         # nothing. In production the backend's `frame-ancestors` refuses it already
         # (local_only.py).
         rx.script("if (window.top !== window.self) document.documentElement.style.display = 'none';"),
+        # The key's cookie belongs to 127.0.0.1, the name the backend URLs use: a page typed
+        # as localhost would talk to the backend from another site, without the cookie, and
+        # localhost may resolve to ::1, where another account can listen.
+        rx.script(
+            "if (location.hostname === 'localhost') "
+            "location.replace(location.href.replace('//localhost', '//127.0.0.1'));"
+        ),
+        # In development the page comes from Vite on port 3000 and uploads to the backend's
+        # port, and the browser sends a cookie to another port only when the request asks for
+        # it. Reflex's upload has no option for it, so its request asks here. The websocket
+        # and the PDF preview carry the cookie by themselves.
+        rx.script(
+            "(() => { const open = XMLHttpRequest.prototype.open;"
+            " XMLHttpRequest.prototype.open = function (...args) { open.apply(this, args);"
+            " if (String(args[1]).includes('/_upload')) this.withCredentials = true; }; })();"
+        ),
         # Declaring the icon is also what stops the browser from requesting /favicon.ico and
         # getting a 404 on every load: it was the application's only console error.
         rx.el.link(rel="icon", type="image/svg+xml", href="/favicon.svg"),
@@ -67,6 +86,8 @@ app = rx.App(
 # Before the first request: the profile, the CVs, the previews and the saved sessions are
 # readable only by the account that runs the app. See private_files.py.
 app.register_lifespan_task(keep_app_files_private)
+# Then the link that opens the app with its key, created the first time (access_key.py).
+app.register_lifespan_task(announce_access)
 
 app.add_page(
     home.home_page,

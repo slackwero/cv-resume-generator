@@ -68,9 +68,9 @@ No terminal needed on macOS.
    The first start takes a few minutes
    (on a Mac without Homebrew, 10 to 20 more); the next ones take seconds, with no
    questions.
-6. The browser opens on the app. If it does not, go to <http://127.0.0.1:3000>. To stop
-   the app, close the window or press Ctrl+C. If something fails, `start.log` in the same
-   folder says what happened.
+6. The browser opens on the app. If it does not, open the link the window shows: it
+   carries the app's key (see below). To stop the app, close the window or press Ctrl+C.
+   If something fails, `start.log` in the same folder says what happened.
 
 If the app is already running, starting it again just opens the browser.
 
@@ -90,21 +90,27 @@ The quick start above already runs the app. Developers start it in development m
 uv run reflex run
 ```
 
-Then open <http://127.0.0.1:3000>. The first start takes a minute or two while Reflex
-installs the interface's dependencies; the next ones are quick.
+Then open the link it prints, `Open CV Generator with its key:
+http://127.0.0.1:8000/_access?key=…`. It leaves the browser a cookie with the key and opens
+<http://127.0.0.1:3000>, which is all that browser needs from then on. The first start takes
+a minute or two while Reflex installs the interface's dependencies; the next ones are quick.
 
 Everything stays on your machine: your profile and your CVs are saved in `data/` and the
 PDFs in `output/`, both excluded from git.
 
 > [!WARNING]
 > This app is meant to run only on your own computer, for one person. It has **no login**:
-> whoever can talk to it can see and change your profile and your CVs. Do not deploy it
-> to a public server.
+> whoever has its key can see and change your profile and your CVs. Do not deploy it to a
+> public server.
 >
-> On your computer it protects itself: it only answers this computer (`127.0.0.1`), and it
-> refuses requests from other websites open in your browser. That includes development
-> mode (`uv run reflex run`): the interface's development server on port 3000 also listens
-> only on this computer.
+> On your computer it protects itself. It only answers this computer (`127.0.0.1`), in
+> development mode (`uv run reflex run`) too, where the interface's development server on
+> port 3000 also listens only on this computer. It refuses requests from other websites
+> open in your browser, and no other page can frame it. And every request carries the app's
+> key, which keeps out other programs and other accounts on the same computer: the key is
+> kept in `data/access.key`, readable only by you, and the link the app prints when it
+> starts trades it for a cookie, as Jupyter does. To change the key, delete that file; the
+> next start makes another, and every browser needs the new link.
 >
 > Started with `start.command`, `start.sh` or `start.bat`, the app runs in production mode on one
 > port, behind that same protection: nothing in it, interface included, is reachable
@@ -393,6 +399,7 @@ data/profile.json      master profile (source of truth)
 data/sync_state.json   last sync
 data/history.json      history index (a cache, except for what you archived)
 data/cvs/<id>.json     frozen snapshot of each generated CV
+data/access.key        the app's key (see the warning under Usage)
 output/                the PDFs
 ```
 

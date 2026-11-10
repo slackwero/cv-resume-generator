@@ -89,11 +89,12 @@ def _run(args: argparse.Namespace, folder: Path, started: list[subprocess.Popen[
 
     # The port comes before the log: an app that is already running still writes to
     # start.log, and opening the log for a new run would wipe what it wrote.
-    state = app.port_state(port)
+    key = app.read_key(folder)
+    state = app.port_state(port, key)
     if state is app.PortState.OURS:
         console.say(f"CV Generator is already running at {url}.")
         if not args.no_browser:
-            app.open_browser(url)
+            app.open_browser(app.access_url(port, key))
         return 0
     if state is app.PortState.OTHER:
         raise _Failure(
@@ -157,10 +158,12 @@ def _start(args: argparse.Namespace, folder: Path, log: TextIO, started: list[su
         _stop_started(started)
         raise _Failure(f"CV Generator could not start. The details are in {log_path}.")
 
-    opened = True if args.no_browser else app.open_browser(url)
+    # The app writes its key when it starts, so it is there once it answers.
+    link = app.access_url(port, app.read_key(folder))
+    opened = True if args.no_browser else app.open_browser(link)
     console.say(f"CV Generator is running at {url}")
     if not opened:
-        console.say(f"Open {url} in your browser.")
+        console.say(f"Open {link} in your browser.")
     console.say("To stop it, close this window or press Ctrl+C.")
 
     app.wait_for_exit(process)

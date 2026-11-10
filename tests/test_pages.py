@@ -49,3 +49,12 @@ def test_the_app_hides_itself_inside_another_page() -> None:
     scripts = " ".join(str(component) for component in app.head_components)
 
     assert "window.top !== window.self" in scripts
+
+
+def test_every_page_says_how_to_open_the_app_when_it_does_not_answer() -> None:
+    """Without the key's cookie the backend refuses the websocket, and Reflex only says it
+    cannot connect: a page opened without the link would not know why."""
+    for path, page in PAGES.items():
+        rendered = str(page().render())
+        assert "connectErrors.length >= 2" in rendered, path
+        assert "access.key" in rendered, path

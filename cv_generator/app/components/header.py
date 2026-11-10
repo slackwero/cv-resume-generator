@@ -13,7 +13,9 @@ This world's composition law is three rules, and all three are applied here:
 from collections.abc import Callable
 
 import reflex as rx
+from reflex.components.core.banner import has_too_many_connection_errors
 
+from cv_generator.app.access_key import ACCESS_PATH, KEY_FILE_NAME
 from cv_generator.app.styles import (
     AMBER,
     CHANNEL,
@@ -24,11 +26,20 @@ from cv_generator.app.styles import (
     TEXT,
     TEXT_MUTED,
     display,
+    error_notice,
     legend,
     style_legend,
     touch_target,
 )
 from cv_generator.rendering.i18n import available_languages
+
+# Shown when the backend keeps refusing the page, which is what it does to a browser
+# without the key's cookie (access_key.py): Reflex alone only says it cannot connect.
+NO_ANSWER = (
+    "CV Generator is not answering this page. If it is running, open it with the link it printed "
+    f"when it started, ending in {ACCESS_PATH}?key=…; the launcher opens it by itself. The key is in "
+    f"data/{KEY_FILE_NAME}."
+)
 
 # The contract of the chosen direction. It goes as an HTML comment inside the body
 # because it has to survive the production build and be auditable with grep against
@@ -320,6 +331,7 @@ def page(
         nav_bar(data, switch),
         rx.el.main(
             rx.el.div(
+                rx.cond(has_too_many_connection_errors, error_notice(NO_ANSWER, margin_bottom="1.5rem"), rx.fragment()),
                 rx.el.div(
                     rx.el.div(
                         rx.el.h1(title, style=display("clamp(2rem, 5vw, 3.25rem)")),

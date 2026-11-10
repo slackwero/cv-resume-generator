@@ -26,6 +26,11 @@ STOP_GRACE_SECONDS = 15.0
 # In production mode `GET /` serves this title. The dev server does not, so the title only
 # marks "ours" for the app the launcher starts itself.
 APP_TITLE = "<title>CV Generator</title>"
+# The app's key (cv_generator/app/access_key.py). The launcher cannot import the app, which
+# it runs before installing its packages: tests/test_launcher_app.py checks they agree.
+KEY_FILE = Path("data") / "access.key"
+ACCESS_PATH = "/_access"
+COOKIE_NAME = "cv_generator_key"
 
 _HTTP_TIMEOUT_SECONDS = 5
 _KILL_SETTLE_SECONDS = 2.0
@@ -42,25 +47,29 @@ class PortState(Enum):
     OTHER = "other"
 
 
-def _get(port: int, path: str) -> tuple[int, str]:
+def _get(port: int, path: str, key: str | None = None) -> tuple[int, str]:
     """Does a GET on 127.0.0.1 and returns the status and the start of the body.
 
     `HTTPConnection("127.0.0.1", ...)` sends `Host: 127.0.0.1:<port>`, which the app's
-    middleware allows (it refuses any Host other than localhost or 127.0.0.1).
+    middleware allows (it refuses any Host other than localhost or 127.0.0.1). With `key`,
+    it carries the cookie the app asks for.
     """
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=_HTTP_TIMEOUT_SECONDS)
     try:
-        connection.request("GET", path)
+        connection.request("GET", path, headers={"Cookie": f"{COOKIE_NAME}={key}"} if key else {})
         response = connection.getresponse()
         return response.status, response.read(1_000_000).decode("utf-8", errors="replace")
     finally:
         connection.close()
 
 
-def port_state(port: int) -> PortState:
-    """Tells whether `port` is free, held by this app, or held by another program."""
+def port_state(port: int, key: str | None = None) -> PortState:
+    """Tells whether `port` is free, held by this app, or held by another program.
+
+    The app answers its page only to its key: without `key`, it looks like another program.
+    """
     try:
-        status, body = _get(port, "/")
+        status, body = _get(port, "/", key)
     except ConnectionRefusedError:
         return PortState.FREE
     except (OSError, http.client.HTTPException):
@@ -74,6 +83,20 @@ def port_state(port: int) -> PortState:
 def app_url(port: int) -> str:
     """Not `localhost`: it may resolve to ::1 first, where another account can listen."""
     return f"http://127.0.0.1:{port}"
+
+
+def read_key(folder: Path) -> str | None:
+    """The key the app wrote in its folder when it started, or None before its first start."""
+    try:
+        key = (folder / KEY_FILE).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return key or None
+
+
+def access_url(port: int, key: str | None) -> str:
+    """The link that opens the app with its key, or its plain address when there is no key."""
+    return f"{app_url(port)}{ACCESS_PATH}?key={key}" if key else app_url(port)
 
 
 def app_command(uv: str, port: int) -> list[str]:

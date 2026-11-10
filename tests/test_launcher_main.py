@@ -59,7 +59,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     seen = Calls()
     monkeypatch.setenv("UV", "/x/uv")
     monkeypatch.setattr(launcher_main, "install_stop_signals", lambda: None)
-    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.FREE)
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: app.PortState.FREE)
     monkeypatch.setattr(prerequisites, "folder_problem", lambda folder: None)
     monkeypatch.setattr(prerequisites, "required_prerequisites", lambda: [present()])
 
@@ -87,7 +87,7 @@ def test_a_second_start_leaves_the_running_apps_log_alone(
 ) -> None:
     log = tmp_path / "start.log"
     log.write_text("what the running app wrote\n", encoding="utf-8")
-    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OURS)
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: app.PortState.OURS)
     assert main(["--no-browser"], folder=tmp_path) == 0
     assert log.read_text(encoding="utf-8") == "what the running app wrote\n"
 
@@ -102,7 +102,7 @@ def test_a_new_start_replaces_the_previous_log(calls: Calls, tmp_path: Path) -> 
 def test_an_app_already_running_only_opens_the_browser(
     calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OURS)
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: app.PortState.OURS)
 
     def no_start(*args: object, **kwargs: object) -> None:
         raise AssertionError("must not start a second app")
@@ -115,7 +115,7 @@ def test_an_app_already_running_only_opens_the_browser(
 def test_another_program_on_the_port_is_named_plainly(
     calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OTHER)
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: app.PortState.OTHER)
     assert main(["--port", "3100"], folder=tmp_path) == 1
     assert "Another program is using port 3100" in capsys.readouterr().out
 
@@ -342,7 +342,7 @@ def test_on_windows_an_app_that_dies_while_it_runs_is_reported(
 def test_an_unexpected_error_is_explained_on_screen_and_detailed_in_the_log(
     calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def boom(port: int) -> app.PortState:
+    def boom(port: int, key: str | None = None) -> app.PortState:
         raise OSError("boom")
 
     monkeypatch.setattr(app, "port_state", boom)
@@ -413,7 +413,7 @@ def test_a_stop_signal_after_the_run_is_over_is_ignored(
 ) -> None:
     """Raised while Python exits, it would only put a traceback on screen."""
     handlers = installed_handlers(monkeypatch)
-    monkeypatch.setattr(app, "port_state", lambda port: app.PortState.OTHER)
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: app.PortState.OTHER)
     assert main([], folder=tmp_path) == 1
     assert not interrupts(handlers[signal.SIGHUP], signal.SIGHUP)
 
@@ -503,3 +503,34 @@ def test_a_folder_that_cannot_be_written_is_explained_plainly(
     out = capsys.readouterr().out
     assert f"CV Generator cannot write in its own folder ({tmp_path})." in out
     assert "Traceback" not in out
+
+
+def test_the_browser_opens_the_link_with_the_app_key(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The app writes its key when it starts; the link trades it for the cookie it asks for."""
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "access.key").write_text("the-key\n", encoding="utf-8")
+    monkeypatch.setattr(app, "open_browser", lambda url: calls.opened.append(url) or False)
+
+    main(["--port", "3100"], folder=tmp_path)
+
+    link = "http://127.0.0.1:3100/_access?key=the-key"
+    assert calls.opened == [link]
+    out = capsys.readouterr().out
+    assert "CV Generator is running at http://127.0.0.1:3100\n" in out, "the key stays out of the running line"
+    assert f"Open {link} in your browser." in out
+
+
+def test_an_app_already_running_is_opened_with_its_key(
+    calls: Calls, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "access.key").write_text("the-key", encoding="utf-8")
+    seen_keys: list[str | None] = []
+    monkeypatch.setattr(app, "port_state", lambda port, key=None: seen_keys.append(key) or app.PortState.OURS)
+
+    assert main(["--port", "3100"], folder=tmp_path) == 0
+
+    assert seen_keys == ["the-key"], "the running app answers its page only with the key"
+    assert calls.opened == ["http://127.0.0.1:3100/_access?key=the-key"]

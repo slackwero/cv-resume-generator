@@ -1,6 +1,9 @@
 # The user's personal data: never versioned
 data/*.json
 data/cvs/*.json
+# The app's access key (cv_generator/app/access_key.py) and the file it is written through
+data/access.key
+data/.access.key.*
 output/*.pdf
 assets/foto.*
 assets/photo.*

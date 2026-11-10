@@ -7,8 +7,10 @@ server (granian, bound by `rxconfig.py`) behaves the same way. Start the app fir
     uv run python scripts/smoke_local_only.py [--frontend-port 3000] [--backend-port 8000]
 
 The checks: the app answers, a foreign Host is refused, a foreign Origin is refused, a
-foreign websocket handshake is refused, only the app's own pages may frame a response, and
-neither the backend nor the frontend (Vite, in development) is reachable from the network.
+foreign websocket handshake is refused, the app's own websocket is refused without the key
+in `data/access.key` and accepted with it, the access link trades the key for a cookie,
+only the app's own pages may frame a response, and neither the backend nor the frontend
+(Vite, in development) is reachable from the network. Run it from the app's folder.
 
 It prints one line per check (`PASS`, `FAIL` or `SKIP`) and exits 0 only when no check
 failed. CI runs it after starting the app, so the first start (which installs the
@@ -22,6 +24,7 @@ import os
 import socket
 import sys
 import time
+from pathlib import Path
 
 import httpx
 
@@ -32,6 +35,8 @@ TEST_NET_ADDRESS = "192.0.2.1"
 POLL_INTERVAL_SECONDS = 2
 REQUEST_TIMEOUT_SECONDS = 5
 CONNECT_TIMEOUT_SECONDS = 3
+KEY_FILE = Path("data") / "access.key"
+COOKIE_NAME = "cv_generator_key"
 
 
 def wait_for_app(ping_url: str, timeout: float) -> bool:
@@ -106,19 +111,17 @@ def check_not_reachable_from_network(port: int) -> bool:
     return False
 
 
-def check_foreign_websocket_refused(backend_port: int) -> bool:
-    """A websocket upgrade from a foreign Origin must be answered with a 403.
+def check_websocket(name: str, backend_port: int, origin: str, expected: str, cookie: str | None = None) -> bool:
+    """Report one check that passes when the websocket handshake answers `expected`.
 
     The websocket carries every app event, so this is the door that matters most. The ASGI
     unit tests cover the close code; this proves that the real server turns it into a 403
     handshake. A raw socket is used because an HTTP client would not send the upgrade.
     """
-    name = "foreign websocket refused"
     request = (
         "GET /_event/?EIO=4&transport=websocket HTTP/1.1\r\n"
-        f"Host: localhost:{backend_port}\r\n"
-        "Origin: http://evil.example\r\n"
-        "Upgrade: websocket\r\n"
+        f"Host: {LOOPBACK}:{backend_port}\r\n"
+        f"Origin: {origin}\r\n" + (f"Cookie: {COOKIE_NAME}={cookie}\r\n" if cookie else "") + "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Version: 13\r\n"
         f"Sec-WebSocket-Key: {base64.b64encode(os.urandom(16)).decode()}\r\n"
@@ -132,10 +135,27 @@ def check_foreign_websocket_refused(backend_port: int) -> bool:
     except OSError as error:
         print(f"FAIL {name}: {type(error).__name__}: {error}")
         return False
-    if status_line.split(" ")[1:2] == ["403"]:
+    if status_line.split(" ")[1:2] == [expected]:
         print(f"PASS {name}")
         return True
-    print(f"FAIL {name}: expected a 403 status line, got {status_line!r}")
+    print(f"FAIL {name}: expected a {expected} status line, got {status_line!r}")
+    return False
+
+
+def check_access_link(backend_port: int, key: str) -> bool:
+    """The link the app prints trades the key for an HttpOnly cookie and opens the app."""
+    name = "the access link sets the key's cookie"
+    url = f"http://{LOOPBACK}:{backend_port}/_access?key={key}"
+    try:
+        response = httpx.get(url, timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=False)
+    except httpx.HTTPError as error:
+        print(f"FAIL {name}: {type(error).__name__}: {error}")
+        return False
+    cookie = response.headers.get("set-cookie", "")
+    if response.status_code == 303 and cookie.startswith(f"{COOKIE_NAME}={key};") and "httponly" in cookie.lower():
+        print(f"PASS {name}")
+        return True
+    print(f"FAIL {name}: got {response.status_code} with set-cookie {cookie!r}")
     return False
 
 
@@ -152,12 +172,18 @@ def main() -> int:
     if not wait_for_app(ping_url, args.timeout):
         print(f"FAIL app answers: no response from {ping_url} within {args.timeout:g} seconds")
         return 1
+    # The backend writes it when it starts, before /ping answers.
+    key = KEY_FILE.read_text(encoding="utf-8").strip()
+    own_origin = f"http://{LOOPBACK}:{args.frontend_port}"
 
     results = [
         expect_status("app answers", ping_url, own_page, 200),
         expect_status("foreign host refused", ping_url, {"Host": "evil.example"}, 403),
         expect_status("foreign origin refused", ping_url, {"Origin": "http://evil.example"}, 403),
-        check_foreign_websocket_refused(args.backend_port),
+        check_websocket("foreign websocket refused", args.backend_port, "http://evil.example", "403", key),
+        check_websocket("websocket without the key refused", args.backend_port, own_origin, "403"),
+        check_websocket("websocket with the key accepted", args.backend_port, own_origin, "101", key),
+        check_access_link(args.backend_port, key),
         check_frame_policy(ping_url),
         *(check_not_reachable_from_network(port) for port in sorted({args.frontend_port, args.backend_port})),
     ]

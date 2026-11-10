@@ -17,10 +17,12 @@ import pytest
 from launcher import app as app_module
 from launcher.app import (
     PortState,
+    access_url,
     app_command,
     app_url,
     open_browser,
     port_state,
+    read_key,
     start_app,
     stop_app,
     wait_for_exit,
@@ -116,6 +118,35 @@ def serve() -> Iterator[SERVE]:
 
 
 @pytest.fixture
+def serve_with_key() -> Iterator[Callable[[str], int]]:
+    """Serves the app's page only to a request with the key's cookie, as the app does."""
+    servers: list[ThreadingHTTPServer] = []
+
+    def start(key: str) -> int:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
+                allowed = self.headers.get("Cookie") == f"cv_generator_key={key}"
+                payload = b"<title>CV Generator</title>" if allowed else b"CV Generator needs its key."
+                self.send_response(200 if allowed else 403)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return server.server_address[1]
+
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.fixture
 def raw_socket_that_closes() -> Iterator[int]:
     """A listener that accepts and hangs up without speaking HTTP."""
     listener = socket.socket()
@@ -160,6 +191,34 @@ def test_another_web_app_is_another_program(serve: SERVE) -> None:
 
 def test_something_that_is_not_http_is_another_program(raw_socket_that_closes: int) -> None:
     assert port_state(raw_socket_that_closes) is PortState.OTHER
+
+
+def test_the_app_is_recognised_when_its_page_asks_for_the_key(serve_with_key: Callable[[str], int]) -> None:
+    """The app answers its own page only to the key's cookie: without it, it would look like another program."""
+    port = serve_with_key("the-key")
+
+    assert port_state(port) is PortState.OTHER
+    assert port_state(port, "the-key") is PortState.OURS
+
+
+def test_the_key_is_read_from_the_app_folder(tmp_path: Path) -> None:
+    assert read_key(tmp_path) is None
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "access.key").write_text("the-key\n", encoding="utf-8")
+
+    assert read_key(tmp_path) == "the-key"
+    assert access_url(3100, "the-key") == "http://127.0.0.1:3100/_access?key=the-key"
+    assert access_url(3100, None) == "http://127.0.0.1:3100"
+
+
+def test_the_launcher_and_the_app_agree_on_the_key() -> None:
+    """The launcher cannot import the app: it runs before the app's packages are installed."""
+    from cv_generator.app import access_key
+
+    assert app_module.KEY_FILE == Path("data") / access_key.KEY_FILE_NAME
+    assert app_module.ACCESS_PATH == access_key.ACCESS_PATH
+    assert app_module.COOKIE_NAME == access_key.COOKIE_NAME
+    assert access_url(1, "k").endswith(f"?{access_key.KEY_PARAMETER}=k")
 
 
 def test_the_url_uses_127_0_0_1() -> None:
