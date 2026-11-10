@@ -361,15 +361,16 @@ def _thumbnail(template: rx.Var) -> rx.Component:
 
 
 def _ats_badge(template: rx.Var) -> rx.Component:
-    """Marks the templates meant to pass an automated filter (`ats` in their meta.json).
+    """Marks the templates an automated filter reads whole, for this CV (`ats_templates`).
 
     It sits on the thumbnail's top right corner, in solid amber: it is a fact about the
-    template, not a state of the card, so it does not change when it is chosen. On the left
-    it covered the name, which the ATS templates print first. The `title` explains the
-    acronym to whoever does not know it.
+    template, not a state of the card, so it does not change when it is chosen. It does
+    change with the photo: a template that draws one carries it only on a CV without it.
+    On the left it covered the name, which the ATS templates print first. The `title`
+    explains the acronym to whoever does not know it.
     """
     return rx.cond(
-        template["ats"] != "",
+        WizardState.ats_templates.contains(template["slug"]),
         rx.el.span(
             "ATS",
             title="Meant for an applicant tracking system (ATS) to read all of the text",

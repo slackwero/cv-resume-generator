@@ -348,18 +348,8 @@ def test_sidebar_labels_the_contact_in_the_cv_language(language: str, caption: s
     assert caption in html
 
 
-@pytest.mark.parametrize("slug", TEMPLATES)
-def test_an_ats_template_has_no_photo(slug: str) -> None:
-    """The wizard's ATS badge promises a CV an automated filter reads whole: a photo adds no
-    text and several filters drop it or reject the document."""
-    meta = load_meta(slug)
-
-    if meta.ats:
-        assert not meta.supports_photo
-
-
 def test_there_is_at_least_one_ats_template() -> None:
-    """Without this, the test above would pass vacuously if nobody declared `ats`."""
+    """Without this, the per-font check in test_ats.py would pass vacuously if nobody declared `ats`."""
     assert any(load_meta(slug).ats for slug in TEMPLATES)
 
 

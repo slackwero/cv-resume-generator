@@ -270,7 +270,7 @@ sync does not offer it again.
 ## Templates
 
 Five designs in `templates/`. Three are single-column, one per typographic voice:
-`modern` (sans, quick read), `executive` (serif, centered, lots of whitespace) and
+`modern` (sans, quick read), `executive` (serif, centered header, lots of whitespace) and
 `technical` (monospace metadata and a green accent). `sidebar` has two columns: a color
 bar with the photo, the contact details, the skills and the languages, and the body with
 the profile text and the work history. `direct` puts the name in a color band and each
@@ -279,18 +279,20 @@ section under its title, in a single column.
 ![The five templates: direct, executive, modern, sidebar and technical](docs/screenshots/templates.png)
 
 The step 1 carousel gives an "ATS" badge to the templates that declare `"ats": true` in
-their `meta.json`, today `direct` and `technical`. The badge is measured, not declared:
-`tests/test_ats.py` renders a three-page CV with each template, reads the PDF with three
-extractors (pypdf, pypdf by position and pdfminer, the base of many resume parsers) and
-requires the name first, each section title on a line of its own followed by its content,
-each role next to its company and as written, the achievements whole and in order, and
-something between two skills to split on, with every font of the wizard. A template that
-passes and prints no photo must carry the badge, and one that carries it must pass.
-`modern` reads cleanly too but can print the photo; `executive` centers its titles and
-pdfminer reads some of them after their content; `sidebar` reads its bar ahead of the
-name. What counts is the PDF, not the HTML: the PDF is written in the order the page is
-drawn, so a profession shown above the name, or a title floated beside its content, comes
-out in that order whatever the HTML says.
+their `meta.json`, today `direct`, `executive`, `modern` and `technical`. The badge is
+measured, not declared: `tests/test_ats.py` renders a three-page CV with each template,
+reads the PDF with three extractors (pypdf, pypdf by position and pdfminer, the base of
+many resume parsers) and requires the name first, each section title on a line of its own
+followed by its content, each role next to its company and as written, the achievements
+whole and in order, and something between two skills to split on, with every font of the
+wizard. A template that passes must carry the badge, and one that carries it must pass.
+A photo adds no text and several filters drop or reject the document, so `modern`, which
+draws it, shows the badge only on a CV that goes without it. `sidebar` reads its bar ahead
+of the name, and `executive` earned the badge once its section titles stopped being
+centered (pdfminer read two of them after their content). What counts is the PDF, not the
+HTML: the PDF is written in the order the page is drawn, so a profession shown above the
+name, or a title floated beside its content, comes out in that order whatever the HTML
+says.
 
 There used to be six, but four shared the font stack and the structure: at thumbnail
 size they could not be told apart, so choosing between them meant paying the cost of

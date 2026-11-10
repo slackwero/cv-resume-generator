@@ -1046,6 +1046,20 @@ class WizardState(rx.State):
         return self.template in self.templates_with_photo
 
     @rx.var
+    def ats_templates(self) -> list[str]:
+        """The templates whose card carries the ATS badge for this CV.
+
+        `ats` says the parsers read the template's text whole; a template that draws the photo
+        earns the badge only while this CV goes without it, like its thumbnail.
+        """
+        prints_photo = self.has_photo and self.include_photo
+        return [
+            template["slug"]
+            for template in self.templates
+            if template["ats"] and not (prints_photo and template["slug"] in self.templates_with_photo)
+        ]
+
+    @rx.var
     def template_name(self) -> str:
         return next((p["name"] for p in self.templates if p["slug"] == self.template), self.template)
 

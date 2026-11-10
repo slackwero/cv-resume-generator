@@ -48,8 +48,9 @@ class TemplateMeta(BaseModel):
     name: str
     description: str
     supports_photo: bool = False
-    # Meant for an automated filter to read it whole: a single reading line, real text and
-    # no photo. The wizard marks it with a badge in the carousel.
+    # The parsers read its text whole and in order (tests/test_ats.py). The wizard marks it
+    # with a badge in the carousel, but only on a CV that prints no photo: a photo adds no
+    # text and several filters drop or reject the document.
     ats: bool = False
     line_height: float
     supported_sections: list[SectionKind]

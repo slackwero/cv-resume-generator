@@ -2,9 +2,10 @@
 
 An applicant tracking system reads the text extracted from the PDF, never the page as it
 looks. A template earns `"ats": true` in its meta.json when every extractor in
-`tests/pdf_text.py` gets the CV out of it whole and in order, and when it prints no
-photo. The test runs both ways: a template that reads cleanly without the badge fails
-too, so the badge always says what was measured.
+`tests/pdf_text.py` gets the CV out of it whole and in order. The test runs both ways: a
+template that reads cleanly without the badge fails too, so the badge always says what was
+measured. The CV is measured without a photo: the wizard shows the badge only on a CV that
+prints none (tests/test_wizard_ats.py).
 
 Real case: `direct` was marked ATS on 2026-10-27 because its HTML was "a single reading
 line". The PDF is written in the order the page is drawn, and on 2026-11-07 every
@@ -24,7 +25,6 @@ from cv_generator.models.style import Style, StyleFont
 from cv_generator.rendering.i18n import default_sections
 from cv_generator.rendering.renderer import available_templates, load_meta, render_pdf
 from tests.pdf_text import extracted_texts
-from tests.test_photo import sample_photo
 
 TEMPLATES = available_templates()
 
@@ -63,7 +63,7 @@ def _achievements(company: str) -> list[Achievement]:
 
 
 def _content() -> CVContent:
-    """A CV with the volume of a real one, over more than one page, with a photo."""
+    """A CV with the volume of a real one, over more than one page, without a photo."""
     return CVContent(
         personal={
             "first_name": "Maya",
@@ -73,7 +73,6 @@ def _content() -> CVContent:
             "email": CONTACT[1],
             "website": CONTACT[2],
             "address": "Austin, TX",
-            "photo": sample_photo(),
         },
         profile="Engineer who automates security in the delivery pipeline: SAST, SCA and secrets in CI/CD.",
         experiences=[
@@ -177,15 +176,12 @@ def _problems(slug: str, font: StyleFont | None = None) -> tuple[str, ...]:
 
 @pytest.mark.parametrize("slug", TEMPLATES)
 def test_the_ats_badge_is_what_the_parsers_read(slug: str) -> None:
-    meta = load_meta(slug)
-    problems = list(_problems(slug))
-    if meta.supports_photo:
-        problems.append("it prints a photo, which adds no text and several filters drop or reject")
+    problems = _problems(slug)
 
-    if meta.ats:
-        assert problems == [], f"{slug} carries the ATS badge, but:\n" + "\n".join(problems)
+    if load_meta(slug).ats:
+        assert problems == (), f"{slug} carries the ATS badge, but:\n" + "\n".join(problems)
     else:
-        assert problems, f"{slug} reads cleanly and prints no photo: give it the ATS badge"
+        assert problems, f"{slug} reads cleanly: give it the ATS badge"
 
 
 @pytest.mark.parametrize("font", list(StyleFont))
