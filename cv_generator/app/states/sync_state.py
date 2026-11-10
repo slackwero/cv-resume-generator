@@ -35,6 +35,11 @@ UPLOAD_ID = "export_linkedin"
 # so it is taken from the list of supported formats and never from the received name.
 SAFE_FILENAME = "export_linkedin"
 
+MEGABYTE = 1024 * 1024
+# The profile PDF weighs a few hundred KB and the full data archive a few MB. The file is
+# read whole into memory, so anything larger is refused before that, unread.
+MAX_UPLOAD_BYTES = 100 * MEGABYTE
+
 
 def _forget_old_copies() -> None:
     """Deletes the copy of the export that versions before 2026-11-10 kept.
@@ -188,9 +193,15 @@ class SyncState(rx.State):
         # but it does not leave the screen stuck on "Reading the file…".
         try:
             try:
-                content = await files[0].read()
+                content = await files[0].read(MAX_UPLOAD_BYTES + 1)
             except OSError as error:
                 self.error_message = f"The uploaded file could not be read: {readable(error)}"
+                return
+            if len(content) > MAX_UPLOAD_BYTES:
+                self.error_message = (
+                    f"That file is larger than {MAX_UPLOAD_BYTES // MEGABYTE} MB, far more than a LinkedIn "
+                    "export. Upload the ZIP or the PDF LinkedIn gave you."
+                )
                 return
 
             # The export holds your personal data. It is read from a folder only you can open

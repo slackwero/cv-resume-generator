@@ -92,3 +92,19 @@ def test_opening_the_screen_deletes_the_copy_older_versions_left(upload_dir: Pat
     run(SyncState.start, new_state(SyncState))
 
     assert list(upload_dir.iterdir()) == []
+
+
+def test_a_file_larger_than_any_export_is_refused_unread(screen: SyncState, monkeypatch: pytest.MonkeyPatch) -> None:
+    analyzed: list[Path] = []
+    monkeypatch.setattr(sync_state, "MAX_UPLOAD_BYTES", 10)
+    monkeypatch.setattr(sync_state, "analyze_file", lambda path, _: analyzed.append(path) or AnalysisResult())
+
+    run(SyncState.process_file, screen, [_upload("export.zip", b"PK" + b"x" * 9)])
+
+    assert "far more than a LinkedIn export" in screen.error_message
+    assert analyzed == []
+    assert not screen.analyzing
+
+    run(SyncState.process_file, screen, [_upload("export.zip", b"PK" + b"x" * 8)])
+
+    assert len(analyzed) == 1, "a file of exactly the limit goes through"
