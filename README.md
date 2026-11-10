@@ -54,7 +54,8 @@ variable to its `mingw64\bin` folder. The app does not need Node: Reflex downloa
 
 No terminal needed on macOS.
 
-1. On GitHub, click **Code → Download ZIP**, then unzip it.
+1. Download the latest version: on the [Releases page](https://github.com/slackwero/cv-resume-generator/releases/latest), under **Assets**,
+   click **Source code (zip)**, then unzip it.
 2. **macOS:** double-click `start.command`. The first time, macOS blocks it because it
    was downloaded. On macOS 14 or earlier, right-click it, choose **Open**, then **Open**
    again. On macOS 15 or later, go to **System Settings → Privacy & Security** and click

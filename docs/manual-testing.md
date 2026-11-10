@@ -28,7 +28,8 @@ Use a machine, or a user account, that has never run the app.
 
 ## macOS
 
-- [ ] **Download.** On GitHub, click Code → Download ZIP. In Finder, double-click the ZIP.
+- [ ] **Download.** On the [latest release](https://github.com/slackwero/cv-resume-generator/releases/latest), click Source code (zip).
+  In Finder, double-click the ZIP.
   A folder appears with `start.command` inside. Leave it in Downloads.
 - [ ] **First double-click.** Note your macOS version (Apple menu → About This Mac).
   Double-click `start.command`. macOS refuses to open it, because it was downloaded.
@@ -79,8 +80,9 @@ Use a machine, or a user account, that has never run the app.
 On Windows, Open uses the PDF's associated viewer. A PDF open in a viewer is locked, so
 Regenerate cannot replace it and says to close it and try again.
 
-- [ ] **Download and start.** On GitHub, click Code → Download ZIP, unzip it and
-  double-click `start.bat`. Write down whether SmartScreen warns and how you got past it.
+- [ ] **Download and start.** On the [latest release](https://github.com/slackwero/cv-resume-generator/releases/latest),
+  click Source code (zip), unzip it and double-click `start.bat`. Write down whether
+  SmartScreen warns and how you got past it.
 - [ ] **The questions.** Without uv or MSYS2 Pango, it asks before installing them
   (uv through Astral's PowerShell installer, MSYS2 through winget, Pango through pacman:
   three separate questions). Nothing installs without a yes.

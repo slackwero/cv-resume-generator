@@ -1,6 +1,6 @@
 [project]
 name = "cv-generator"
-version = "0.1.0"
+version = "1.0.0"
 description = "CV generator that tailors each résumé to the job application, with a history and PDF output"
 requires-python = ">=3.12"
 dependencies = [
