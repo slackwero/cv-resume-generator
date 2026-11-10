@@ -1,6 +1,9 @@
 """Wizard state: from your master profile to a CV tailored to one application."""
 
 import asyncio
+import contextlib
+import secrets
+import time
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
@@ -84,9 +87,15 @@ PROFESSION_GONE = "The profession this CV used is no longer in your list, so it 
 # The start of the message `_remember_language` leaves; the switch clears only that one.
 LANGUAGE_NOT_REMEMBERED = "The language could not be remembered: "
 
-# The preview is always written to the same file and refreshed with a counter in the
-# URL: a new name per render would leave an orphan PDF every time.
-PREVIEW_FILE = "preview.pdf"
+# The preview is your CV, in the folder Reflex serves at /_upload to any program on this
+# computer that asks. Each tab writes its own under a name nobody can guess, chosen at its
+# first render; the next renders overwrite it and refresh it with a counter in the URL, so
+# there is no orphan PDF per render.
+PREVIEW_PREFIX = "preview-"
+# Opening the wizard deletes the previews of tabs closed this long ago, and the fixed names
+# earlier versions wrote, which anyone could guess.
+PREVIEW_MAX_AGE_SECONDS = 24 * 60 * 60
+OLD_PREVIEW_FILES = ("preview.pdf", "previsualizacion.pdf")
 
 # A4 at 96 dpi, which is the unit the browser draws the PDF viewer in.
 PAGE_HEIGHT_PX = 1123
@@ -151,6 +160,23 @@ def style_from_vars(*, style_color: str, style_font: str, style_size: str, style
         size=FontSize(style_size) if style_size else None,
         line_height=style_line_height or None,
     )
+
+
+def _forget_old_previews() -> None:
+    """Deletes the guessable previews of earlier versions and those of tabs closed long ago.
+
+    A tab still open only loses its preview if it is that old, and writes it again at its
+    next render. One that cannot be deleted is left: the wizard still works.
+    """
+    folder = rx.get_upload_dir()
+    stale = [folder / name for name in OLD_PREVIEW_FILES]
+    for path in folder.glob(f"{PREVIEW_PREFIX}*.pdf"):
+        with contextlib.suppress(OSError):
+            if time.time() - path.stat().st_mtime > PREVIEW_MAX_AGE_SECONDS:
+                stale.append(path)
+    for path in stale:
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
 
 
 class WizardState(rx.State):
@@ -256,6 +282,7 @@ class WizardState(rx.State):
     pdf_preview: str = ""
     pages: int = 0
     _previous_version: int = 0
+    _preview_file: str = ""
 
     posting_company: str = ""
     posting_url: str = ""
@@ -285,6 +312,7 @@ class WizardState(rx.State):
         self.max_step = FIRST_STEP
         self._set_style(Style())
         self.large_view = ""
+        _forget_old_previews()
 
         profile = load_profile(DATA_DIR)
         if profile is None:
@@ -1487,8 +1515,10 @@ class WizardState(rx.State):
             self.previewing = False
             return
 
+        if not self._preview_file:
+            self._preview_file = f"{PREVIEW_PREFIX}{secrets.token_urlsafe(16)}.pdf"
         try:
-            target = rx.get_upload_dir() / PREVIEW_FILE
+            target = rx.get_upload_dir() / self._preview_file
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(pdf)
         except OSError as error:
@@ -1497,7 +1527,7 @@ class WizardState(rx.State):
             return
 
         self._previous_version += 1
-        self.pdf_preview = f"{PREVIEW_FILE}?v={self._previous_version}"
+        self.pdf_preview = f"{self._preview_file}?v={self._previous_version}"
         self.pages = pages
         self.previewing = False
 
