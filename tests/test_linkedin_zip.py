@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from cv_generator.importers.base import ProfileDraft
-from cv_generator.importers.linkedin_zip import import_from_zip, parse_export
+from cv_generator.importers.linkedin_zip import MAX_CSV_BYTES, import_from_zip, parse_export
 
 PROFILE_CSV = (
     "First Name,Last Name,Maiden Name,Address,Birth Date,Headline,Summary,Industry,"
@@ -177,6 +177,35 @@ def test_ignores_paths_that_escape_the_zip(tmp_path: Path) -> None:
 
     assert draft.skills == [], "it must not read a CSV whose path leaves the archive"
     assert draft.personal.first_name == "Jane"
+
+
+def test_opens_only_the_csvs_it_uses(tmp_path: Path) -> None:
+    """A full export also carries messages and connections, which a CV never uses.
+
+    The unused file is damaged: decompressing it fails its checksum, so the import only
+    succeeds if it is never opened.
+    """
+    path = tmp_path / "export.zip"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
+        for name, content in EXPORT.items():
+            zf.writestr(name, content)
+        zf.writestr("messages.csv", "a private message")
+    path.write_bytes(path.read_bytes().replace(b"a private message", b"a damaged message"))
+
+    draft = import_from_zip(path)
+
+    assert draft.personal.first_name == "Jane"
+
+
+def test_refuses_csvs_that_expand_past_what_linkedin_writes(tmp_path: Path) -> None:
+    """A ZIP of a few KB can expand to gigabytes: only so much is ever decompressed."""
+    path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("Profile.csv", PROFILE_CSV)
+        zf.writestr("Positions.csv", "a" * (MAX_CSV_BYTES + 1))
+
+    with pytest.raises(ValueError, match="more than LinkedIn writes"):
+        import_from_zip(path)
 
 
 def test_records_the_name_each_skill_came_with(draft: ProfileDraft) -> None:

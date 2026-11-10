@@ -34,6 +34,15 @@ SKILLS_FILE = "skills.csv"
 LANGUAGES_FILE = "languages.csv"
 CERTIFICATIONS_FILE = "certifications.csv"
 EMAILS_FILE = "email addresses.csv"
+# Nothing else in the archive is opened: a full export also carries messages, connections
+# and invitations, which a CV never uses.
+USED_FILES = frozenset(
+    {PROFILE_FILE, POSITIONS_FILE, EDUCATION_FILE, SKILLS_FILE, LANGUAGES_FILE, CERTIFICATIONS_FILE, EMAILS_FILE}
+)
+# What those CSVs may add up to once decompressed. LinkedIn writes a few hundred KB at most
+# (a position's description stops at 2000 characters), while a ZIP of a few KB can expand
+# to gigabytes and fill the memory.
+MAX_CSV_BYTES = 10 * 1024 * 1024
 
 # When LinkedIn only gives the start year, January is assumed. The model requires
 # year-month, and losing the whole experience would be worse than approximating the month.
@@ -198,15 +207,27 @@ def import_from_zip(path: Path) -> ProfileDraft:
 
     The CSVs are located by their final name, because some exports deliver them inside
     a folder. Entries with paths that escape the archive are ignored: a ZIP is external
-    content and must not be able to direct a read.
+    content and must not be able to direct a read. The sizes it declares are not trusted
+    either: each CSV is read up to what is left of `MAX_CSV_BYTES`, and one more byte means
+    it is not LinkedIn's export.
+
+    Raises:
+        ValueError: if the CSVs it uses expand past `MAX_CSV_BYTES`.
     """
     files: dict[str, str] = {}
+    left = MAX_CSV_BYTES
 
     with zipfile.ZipFile(path) as zf:
         for element in zf.infolist():
-            if element.is_dir() or not _is_safe_path(element.filename):
-                continue
             name = Path(element.filename).name
-            files[name] = zf.read(element).decode("utf-8", errors="replace")
+            if element.is_dir() or not _is_safe_path(element.filename) or name.lower() not in USED_FILES:
+                continue
+            with zf.open(element) as member:
+                content = member.read(left + 1)
+            if len(content) > left:
+                limit = MAX_CSV_BYTES // (1024 * 1024)
+                raise ValueError(f"its CSVs expand to more than {limit} MB, much more than LinkedIn writes")
+            left -= len(content)
+            files[name] = content.decode("utf-8", errors="replace")
 
     return parse_export(files)
