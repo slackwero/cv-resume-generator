@@ -1,7 +1,7 @@
 # CV Generator
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Reflex 0.9](https://img.shields.io/badge/Reflex-0.9-6E56CF?logo=reflex&logoColor=white)](https://reflex.dev/)
+[![Reflex 0.10](https://img.shields.io/badge/Reflex-0.10-6E56CF?logo=reflex&logoColor=white)](https://reflex.dev/)
 [![PDF: WeasyPrint](https://img.shields.io/badge/PDF-WeasyPrint-1E1E1E)](https://weasyprint.org/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
